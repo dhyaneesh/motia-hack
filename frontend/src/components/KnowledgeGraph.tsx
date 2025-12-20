@@ -34,7 +34,9 @@ export function KnowledgeGraph() {
   // Handle node click - fetch details and open sidebar
   const onNodeClick: NodeMouseHandler = useCallback(async (event, node) => {
     try {
+      console.log('Fetching node details for:', node.id);
       const details = await api.getNodeDetails(node.id);
+      console.log('Received node details:', details);
       selectNode(details);
     } catch (error) {
       console.error('Failed to fetch node details:', error);

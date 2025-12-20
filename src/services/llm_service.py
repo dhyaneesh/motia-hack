@@ -1,14 +1,13 @@
 import os
 import json
 from dotenv import load_dotenv
-import google.generativeai as genai
+from google import genai
 
 # Load environment variables from .env file
 load_dotenv()
 
 # Configure Gemini API
-genai.configure(api_key=os.environ.get("GEMINI_API_KEY"))
-model = genai.GenerativeModel("gemini-1.5-flash")
+client = genai.Client(api_key=os.environ.get("GEMINI_API_KEY"))
 
 
 async def generate_answer(question: str, context: dict = None) -> str:
@@ -22,7 +21,10 @@ async def generate_answer(question: str, context: dict = None) -> str:
         if context:
             prompt += f"\n\nContext: {json.dumps(context, indent=2)}"
         
-        response = model.generate_content(prompt)
+        response = client.models.generate_content(
+            model="gemini-2.5-flash",
+            contents=prompt
+        )
         return response.text
     except Exception as e:
         raise Exception(f"Error generating answer: {str(e)}")
@@ -39,7 +41,10 @@ async def extract_concepts(question: str, answer: str) -> list[dict]:
         
         Return the JSON array only, no other text."""
         
-        response = model.generate_content(prompt)
+        response = client.models.generate_content(
+            model="gemini-2.5-flash",
+            contents=prompt
+        )
         text = response.text.strip()
         
         # Remove markdown code blocks if present
@@ -51,10 +56,19 @@ async def extract_concepts(question: str, answer: str) -> list[dict]:
         
         concepts = json.loads(text)
         
-        # Ensure each concept has an id
+        # Ensure each concept has a consistent id format
         for idx, concept in enumerate(concepts):
-            if "id" not in concept:
-                concept["id"] = f"concept_{idx}_{concept.get('name', 'unknown').lower().replace(' ', '_')}"
+            if "id" not in concept or not concept.get("id"):
+                # Generate ID from name if not provided
+                name_slug = concept.get('name', 'unknown').lower().replace(' ', '_').replace('-', '_')
+                concept["id"] = f"concept_{idx}_{name_slug}"
+            else:
+                # Normalize existing ID to ensure consistency
+                existing_id = concept["id"]
+                # If it doesn't start with "concept_", add the prefix
+                if not existing_id.startswith("concept_"):
+                    name_slug = existing_id.lower().replace(' ', '_').replace('-', '_')
+                    concept["id"] = f"concept_{idx}_{name_slug}"
         
         return concepts
     except json.JSONDecodeError as e:
@@ -72,7 +86,10 @@ async def generate_cluster_label(concepts: list[dict]) -> str:
         
         Return only the label, no other text."""
         
-        response = model.generate_content(prompt)
+        response = client.models.generate_content(
+            model="gemini-2.5-flash",
+            contents=prompt
+        )
         return response.text.strip()
     except Exception as e:
         # Fallback to first concept name

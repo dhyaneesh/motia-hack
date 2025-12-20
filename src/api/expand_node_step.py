@@ -1,17 +1,35 @@
 import os
 import json
-import google.generativeai as genai
+from pydantic import BaseModel
+from google import genai
 from src.services.graph_service import graph_service
 from src.services import exa_service, llm_service
+
+# Configure Gemini API client
+client = genai.Client(api_key=os.environ.get("GEMINI_API_KEY"))
+
+# Response schemas
+class ExpandNodeResponse(BaseModel):
+    newNodes: list
+    newEdges: list
+
+class ErrorResponse(BaseModel):
+    error: str
 
 config = {
     "name": "ExpandNode",
     "type": "api",
     "path": "/api/nodes/:nodeId/expand",
     "method": "POST",
-    "description": "Expand a node to fetch more related concepts",
+    "description": "Expand a knowledge graph node by fetching additional related concepts from external sources. Uses Exa AI to search for related content and extracts new concepts using LLM.",
     "emits": [],
-    "flows": ["knowledge-graph-flow"]
+    "flows": ["knowledge-graph-flow"],
+    "responseSchema": {
+        200: ExpandNodeResponse.model_json_schema(),
+        400: ErrorResponse.model_json_schema(),
+        404: ErrorResponse.model_json_schema(),
+        500: ErrorResponse.model_json_schema()
+    }
 }
 
 async def handler(req, context):
@@ -51,9 +69,10 @@ async def handler(req, context):
             [{{"id": "unique_id", "name": "concept name", "type": "concept|entity|event|person", "description": "brief description"}}]
             """
             
-            genai.configure(api_key=os.environ.get("GEMINI_API_KEY"))
-            model = genai.GenerativeModel("gemini-1.5-flash")
-            response = model.generate_content(prompt)
+            response = client.models.generate_content(
+                model="gemini-2.5-flash",
+                contents=prompt
+            )
             
             text = response.text.strip()
             if text.startswith("```"):
@@ -69,7 +88,7 @@ async def handler(req, context):
                 concept["references"] = new_results[:2]  # Attach first 2 references
             
         except Exception as e:
-            context.logger.warning("Failed to extract concepts from articles", {"error": str(e)})
+            context.logger.info("Failed to extract concepts from articles", {"error": str(e)})
             # Fallback: create concepts from article titles
             new_concepts = []
             for idx, result in enumerate(new_results[:3]):
@@ -81,8 +100,51 @@ async def handler(req, context):
                     "references": [result]
                 })
         
+        # Load graph data from Motia state first
+        node_data = await context.state.get("knowledge_graph", "node_data")
+        graph_nodes = await context.state.get("knowledge_graph", "graph_nodes")
+        
+        if node_data:
+            graph_service.node_data = node_data
+        if graph_nodes:
+            # Rebuild graph structure
+            import networkx as nx
+            graph_service.graph = nx.Graph()
+            for nid in graph_nodes:
+                if nid in graph_service.node_data:
+                    node_info = graph_service.node_data[nid]
+                    if node_info is None or not isinstance(node_info, dict):
+                        continue
+                    graph_service.graph.add_node(
+                        nid,
+                        name=node_info.get("name", "Unknown"),
+                        description=node_info.get("description", ""),
+                        type=node_info.get("type", "concept"),
+                        cluster_id=node_info.get("cluster_id", "")
+                    )
+            
+            # Rebuild edges
+            cluster_nodes = {}
+            for nid, data in graph_service.node_data.items():
+                if data is None or not isinstance(data, dict):
+                    continue
+                cluster_id = data.get("cluster_id", "")
+                if cluster_id not in cluster_nodes:
+                    cluster_nodes[cluster_id] = []
+                cluster_nodes[cluster_id].append(nid)
+            
+            for cluster_id, node_ids in cluster_nodes.items():
+                for i, nid1 in enumerate(node_ids):
+                    for nid2 in node_ids[i+1:]:
+                        if graph_service.graph.has_node(nid1) and graph_service.graph.has_node(nid2):
+                            graph_service.graph.add_edge(nid1, nid2, weight=0.8, type="cluster")
+        
         # Add to graph
         new_nodes, new_edges = graph_service.expand_node(node_id, new_concepts)
+        
+        # Save updated graph data back to state
+        await context.state.set("knowledge_graph", "node_data", graph_service.node_data)
+        await context.state.set("knowledge_graph", "graph_nodes", list(graph_service.graph.nodes()))
         
         context.logger.info("Expanded node", {
             "node_id": node_id,

@@ -1,14 +1,14 @@
 import os
 from dotenv import load_dotenv
-import google.generativeai as genai
+from google import genai
 from pinecone import Pinecone
 from typing import List
 
 # Load environment variables from .env file
 load_dotenv()
 
-# Configure Gemini for embeddings
-genai.configure(api_key=os.environ.get("GEMINI_API_KEY"))
+# Configure Gemini API client
+client = genai.Client(api_key=os.environ.get("GEMINI_API_KEY"))
 
 # Initialize Pinecone
 pc = Pinecone(api_key=os.environ.get("PINECONE_API_KEY"))
@@ -36,12 +36,42 @@ def get_index():
 async def get_embedding(text: str) -> List[float]:
     """Generate embedding for text using Gemini."""
     try:
-        result = genai.embed_content(
-            model="models/text-embedding-004",
-            content=text,
-            task_type="retrieval_document"
+        result = client.models.embed_content(
+            model="text-embedding-004",
+            contents=text
         )
-        return result['embedding']  # 768-dimensional vector
+        # New API returns embeddings (plural) - extract values from ContentEmbedding objects
+        if hasattr(result, 'embeddings'):
+            embeddings = result.embeddings
+            # If it's a list, get the first embedding and extract its values
+            if isinstance(embeddings, list) and len(embeddings) > 0:
+                embedding_obj = embeddings[0]
+                # Extract values from ContentEmbedding object
+                if hasattr(embedding_obj, 'values'):
+                    return list(embedding_obj.values)
+                elif hasattr(embedding_obj, 'embedding'):
+                    return list(embedding_obj.embedding)
+                else:
+                    # Try to convert directly if it's already a list
+                    return list(embedding_obj) if hasattr(embedding_obj, '__iter__') else [embedding_obj]
+            # If it's a single embedding object
+            elif hasattr(embeddings, 'values'):
+                return list(embeddings.values)
+            elif hasattr(embeddings, 'embedding'):
+                return list(embeddings.embedding)
+            else:
+                return list(embeddings) if hasattr(embeddings, '__iter__') else [embeddings]
+        # Fallback to embedding (singular) for backward compatibility
+        elif hasattr(result, 'embedding'):
+            embedding = result.embedding
+            if hasattr(embedding, 'values'):
+                return list(embedding.values)
+            elif hasattr(embedding, '__iter__'):
+                return list(embedding)
+            else:
+                return [embedding]
+        else:
+            raise Exception("Unexpected embedding result format")
     except Exception as e:
         raise Exception(f"Error generating embedding: {str(e)}")
 

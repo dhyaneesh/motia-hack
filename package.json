@@ -12,5 +12,8 @@
   },
   "keywords": [
     "motia"
-  ]
+  ],
+  "dependencies": {
+    "motia": "^0.17.9-beta.191"
+  }
 }

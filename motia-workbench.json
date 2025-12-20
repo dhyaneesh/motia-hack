@@ -2,14 +2,30 @@
   {
     "id": "hello-world-flow",
     "config": {
-      "src/hello/process_greeting_step.py": {
-        "x": 409,
-        "y": 44
+      "src\\hello\\process_greeting_step.py": {
+        "x": 337,
+        "y": 28
       },
-      "src/hello/hello_api_step.py": {
-        "x": 0,
-        "y": 0,
-        "sourceHandlePosition": "right"
+      "src\\hello\\hello_api_step.py": {
+        "x": -82,
+        "y": -59
+      }
+    }
+  },
+  {
+    "id": "knowledge-graph-flow",
+    "config": {
+      "src\\api\\get_node_step.py": {
+        "x": 119,
+        "y": 71
+      },
+      "src\\api\\expand_node_step.py": {
+        "x": -379,
+        "y": 75
+      },
+      "src\\api\\chat_step.py": {
+        "x": 544,
+        "y": 101
       }
     }
   }

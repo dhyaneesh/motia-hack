@@ -93,19 +93,46 @@ class GraphService:
         return {"nodes": nodes, "edges": edges}
     
     def get_node(self, node_id: str) -> Optional[Dict]:
-        """Get node data by ID."""
-        if node_id not in self.node_data:
-            return None
+        """Get node data by ID. Tries multiple matching strategies."""
+        # Direct lookup
+        if node_id in self.node_data:
+            data = self.node_data[node_id]
+            return {
+                "id": node_id,
+                "name": data["name"],
+                "description": data["description"],
+                "type": data["type"],
+                "cluster_id": data["cluster_id"],
+                "references": data["references"]
+            }
         
-        data = self.node_data[node_id]
-        return {
-            "id": node_id,
-            "name": data["name"],
-            "description": data["description"],
-            "type": data["type"],
-            "cluster_id": data["cluster_id"],
-            "references": data["references"]
-        }
+        # Try to find by name (case-insensitive, normalized)
+        node_id_lower = node_id.lower().replace(' ', '_').replace('-', '_')
+        for stored_id, data in self.node_data.items():
+            stored_id_lower = stored_id.lower().replace(' ', '_').replace('-', '_')
+            # Check if the requested ID matches the stored ID (normalized)
+            if node_id_lower == stored_id_lower or node_id_lower in stored_id_lower or stored_id_lower in node_id_lower:
+                return {
+                    "id": stored_id,  # Return the actual stored ID
+                    "name": data["name"],
+                    "description": data["description"],
+                    "type": data["type"],
+                    "cluster_id": data["cluster_id"],
+                    "references": data["references"]
+                }
+            # Also try matching by name
+            name_lower = data.get("name", "").lower().replace(' ', '_').replace('-', '_')
+            if node_id_lower == name_lower:
+                return {
+                    "id": stored_id,
+                    "name": data["name"],
+                    "description": data["description"],
+                    "type": data["type"],
+                    "cluster_id": data["cluster_id"],
+                    "references": data["references"]
+                }
+        
+        return None
     
     def get_related_nodes(self, node_id: str) -> List[Dict]:
         """Get nodes connected to the given node."""

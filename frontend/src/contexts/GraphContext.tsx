@@ -19,6 +19,7 @@ export function GraphProvider({ children }: { children: ReactNode }) {
   const [selectedNode, setSelectedNode] = useState<SelectedNodeDetails | null>(null);
   
   const selectNode = (node: SelectedNodeDetails | null) => {
+    console.log('Setting selected node:', node);
     setSelectedNode(node);
   };
   

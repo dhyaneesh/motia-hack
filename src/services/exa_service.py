@@ -16,19 +16,26 @@ async def search(query: str, num_results: int = 5) -> List[Dict]:
         response = exa.search_and_contents(
             query,
             type="neural",
-            use_autoprompt=True,
             num_results=num_results,
             text=True  # Include full text
         )
         
         results = []
         for r in response.results:
+            # Handle published_date - could be datetime or string
+            published_date = None
+            if r.published_date:
+                if hasattr(r.published_date, 'isoformat'):
+                    published_date = r.published_date.isoformat()
+                else:
+                    published_date = str(r.published_date)
+            
             results.append({
                 "id": r.id or f"exa_{len(results)}",
                 "url": r.url,
                 "title": r.title or "Untitled",
                 "text": r.text or "",
-                "published_date": r.published_date.isoformat() if r.published_date else None,
+                "published_date": published_date,
                 "author": getattr(r, 'author', None)
             })
         

@@ -13,17 +13,22 @@ class ChatResponse(BaseModel):
     graph: dict
     clusters: list
 
+class ErrorResponse(BaseModel):
+    error: str
+
 config = {
     "name": "ChatAPI",
     "type": "api",
     "path": "/api/chat",
     "method": "POST",
-    "description": "Process question and return answer with knowledge graph",
+    "description": "Process a question using AI and return an answer with an interactive knowledge graph visualization. Extracts concepts, generates embeddings, clusters related concepts, and builds a graph structure.",
     "emits": [],
     "flows": ["knowledge-graph-flow"],
     "bodySchema": ChatRequest.model_json_schema(),
     "responseSchema": {
-        200: ChatResponse.model_json_schema()
+        200: ChatResponse.model_json_schema(),
+        400: ErrorResponse.model_json_schema(),
+        500: ErrorResponse.model_json_schema()
     }
 }
 
@@ -53,7 +58,7 @@ async def handler(req, context):
                 search_results = await exa_service.search(concept["name"], num_results=3)
                 concept["references"] = search_results
             except Exception as e:
-                context.logger.warning(f"Exa search failed for {concept['name']}", {"error": str(e)})
+                context.logger.info(f"Exa search failed for {concept['name']}", {"error": str(e)})
                 concept["references"] = []
         
         # 4. Generate embeddings for all concepts
@@ -68,6 +73,10 @@ async def handler(req, context):
         # 6. Build graph from clusters and concepts
         graph = graph_service.build_graph(clusters, concepts)
         context.logger.info("Built graph", {"node_count": len(graph["nodes"]), "edge_count": len(graph["edges"])})
+        
+        # 7. Store graph data in Motia state for persistence across requests
+        await context.state.set("knowledge_graph", "node_data", graph_service.node_data)
+        await context.state.set("knowledge_graph", "graph_nodes", list(graph_service.graph.nodes()))
         
         return {
             "status": 200,
