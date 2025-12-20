@@ -1,0 +1,201 @@
+import networkx as nx
+from typing import Dict, List, Optional
+import uuid
+
+
+class GraphService:
+    """Service for building and managing knowledge graphs using NetworkX."""
+    
+    def __init__(self):
+        self.graph = nx.Graph()
+        self.node_data = {}  # Store full node data separately
+    
+    def build_graph(self, clusters: List[Dict], concepts: List[Dict]) -> Dict:
+        """Build knowledge graph from clusters and concepts."""
+        # Clear previous graph
+        self.graph = nx.Graph()
+        self.node_data = {}
+        
+        # Create a concept lookup
+        concept_lookup = {c.get("id"): c for c in concepts}
+        
+        # Add nodes for each concept
+        for cluster in clusters:
+            cluster_id = cluster["id"]
+            for concept_id in cluster.get("conceptIds", []):
+                concept = concept_lookup.get(concept_id)
+                if not concept:
+                    continue
+                
+                # Store full node data
+                self.node_data[concept_id] = {
+                    "name": concept.get("name", "Unknown"),
+                    "description": concept.get("description", ""),
+                    "type": concept.get("type", "concept"),
+                    "cluster_id": cluster_id,
+                    "references": concept.get("references", [])
+                }
+                
+                # Add node to graph
+                self.graph.add_node(
+                    concept_id,
+                    name=concept.get("name", "Unknown"),
+                    description=concept.get("description", ""),
+                    type=concept.get("type", "concept"),
+                    cluster_id=cluster_id
+                )
+        
+        # Add edges within clusters (connect concepts in same cluster)
+        for cluster in clusters:
+            concept_ids = cluster.get("conceptIds", [])
+            # Connect each concept to others in the same cluster
+            for i, concept_id1 in enumerate(concept_ids):
+                for concept_id2 in concept_ids[i+1:]:
+                    if self.graph.has_node(concept_id1) and self.graph.has_node(concept_id2):
+                        self.graph.add_edge(concept_id1, concept_id2, weight=0.8, type="cluster")
+        
+        # Calculate positions using spring layout
+        if len(self.graph.nodes()) > 0:
+            positions = nx.spring_layout(self.graph, k=2, iterations=50, seed=42)
+        else:
+            positions = {}
+        
+        return self._to_react_flow_format(positions)
+    
+    def _to_react_flow_format(self, positions: Dict) -> Dict:
+        """Convert NetworkX graph to React Flow format."""
+        nodes = []
+        for node_id, pos in positions.items():
+            data = self.node_data.get(node_id, {})
+            nodes.append({
+                "id": node_id,
+                "type": "conceptNode",
+                "position": {"x": pos[0] * 800, "y": pos[1] * 600},
+                "data": {
+                    "name": data.get("name", "Unknown"),
+                    "description": data.get("description", ""),
+                    "nodeType": data.get("type", "concept"),
+                    "clusterId": data.get("cluster_id", ""),
+                    "references": data.get("references", [])
+                }
+            })
+        
+        edges = []
+        for u, v, edge_data in self.graph.edges(data=True):
+            edges.append({
+                "id": f"{u}-{v}",
+                "source": u,
+                "target": v,
+                "type": "smoothstep",
+                "weight": edge_data.get("weight", 1.0)
+            })
+        
+        return {"nodes": nodes, "edges": edges}
+    
+    def get_node(self, node_id: str) -> Optional[Dict]:
+        """Get node data by ID."""
+        if node_id not in self.node_data:
+            return None
+        
+        data = self.node_data[node_id]
+        return {
+            "id": node_id,
+            "name": data["name"],
+            "description": data["description"],
+            "type": data["type"],
+            "cluster_id": data["cluster_id"],
+            "references": data["references"]
+        }
+    
+    def get_related_nodes(self, node_id: str) -> List[Dict]:
+        """Get nodes connected to the given node."""
+        if node_id not in self.graph:
+            return []
+        
+        related = []
+        for neighbor_id in self.graph.neighbors(node_id):
+            neighbor_data = self.node_data.get(neighbor_id)
+            if neighbor_data:
+                related.append({
+                    "id": neighbor_id,
+                    "name": neighbor_data["name"]
+                })
+        
+        return related
+    
+    def expand_node(self, node_id: str, new_concepts: List[Dict]) -> tuple[List[Dict], List[Dict]]:
+        """Add new concepts connected to an existing node."""
+        if node_id not in self.graph:
+            return [], []
+        
+        new_nodes = []
+        new_edges = []
+        
+        for concept in new_concepts:
+            concept_id = concept.get("id", f"concept_{uuid.uuid4().hex[:8]}")
+            
+            # Add to node data
+            self.node_data[concept_id] = {
+                "name": concept.get("name", "Unknown"),
+                "description": concept.get("description", ""),
+                "type": concept.get("type", "concept"),
+                "cluster_id": self.node_data[node_id]["cluster_id"],
+                "references": concept.get("references", [])
+            }
+            
+            # Add to graph
+            self.graph.add_node(
+                concept_id,
+                name=concept.get("name", "Unknown"),
+                description=concept.get("description", ""),
+                type=concept.get("type", "concept"),
+                cluster_id=self.node_data[node_id]["cluster_id"]
+            )
+            
+            # Connect to original node
+            self.graph.add_edge(node_id, concept_id, weight=0.7, type="expanded")
+            
+            # Calculate position relative to original node
+            original_pos = None
+            for n in self.graph.nodes():
+                if n == node_id:
+                    # Get approximate position from existing nodes
+                    if len(self.graph.nodes()) > 1:
+                        positions = nx.spring_layout(self.graph, k=2, iterations=20, seed=42)
+                        original_pos = positions.get(node_id, (0, 0))
+                    else:
+                        original_pos = (0, 0)
+                    break
+            
+            new_pos = {
+                "x": (original_pos[0] if original_pos else 0) * 800 + 200,
+                "y": (original_pos[1] if original_pos else 0) * 600 + 200
+            }
+            
+            new_nodes.append({
+                "id": concept_id,
+                "type": "conceptNode",
+                "position": new_pos,
+                "data": {
+                    "name": concept.get("name", "Unknown"),
+                    "description": concept.get("description", ""),
+                    "nodeType": concept.get("type", "concept"),
+                    "clusterId": self.node_data[node_id]["cluster_id"],
+                    "references": concept.get("references", [])
+                }
+            })
+            
+            new_edges.append({
+                "id": f"{node_id}-{concept_id}",
+                "source": node_id,
+                "target": concept_id,
+                "type": "smoothstep",
+                "weight": 0.7
+            })
+        
+        return new_nodes, new_edges
+
+
+# Global instance
+graph_service = GraphService()
+
