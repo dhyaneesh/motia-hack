@@ -1,8 +1,8 @@
 import { Providers } from './providers';
 
 export const metadata = {
-  title: 'Knowledge Graph Chatbot',
-  description: 'Interactive knowledge graph visualization with LLM-powered search',
+  title: 'Dive - Searching Redefined',
+  description: 'Dive: Visual search redefined. Explore knowledge through interactive graphs, shop with visual product discovery, and learn with structured concept hierarchies.',
 };
 
 export default function RootLayout({

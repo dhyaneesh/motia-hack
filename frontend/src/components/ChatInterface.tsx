@@ -11,7 +11,8 @@ import {
   useToast,
   IconButton,
   InputGroup,
-  InputRightElement
+  InputRightElement,
+  Heading
 } from '@chakra-ui/react';
 import { AttachmentIcon } from '@chakra-ui/icons';
 import { useGraph } from '@/contexts/GraphContext';
@@ -98,6 +99,18 @@ export function ChatInterface() {
   
   return (
     <VStack h="100vh" spacing={0}>
+      {/* App Header */}
+      <Box w="100%" borderBottom="1px" borderColor="gray.200" bg="white" p={3}>
+        <HStack spacing={2} align="center">
+          <Heading size="md" color="blue.600" fontWeight="bold">
+            Dive
+          </Heading>
+          <Text fontSize="xs" color="gray.600" fontStyle="italic">
+            Searching Redefined
+          </Text>
+        </HStack>
+      </Box>
+      
       {/* Messages */}
       <Box flex={1} overflowY="auto" w="100%" p={4}>
         <VStack align="stretch" spacing={4}>

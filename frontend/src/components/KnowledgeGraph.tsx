@@ -10,7 +10,7 @@ import {
   NodeMouseHandler
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
-import { Box } from '@chakra-ui/react';
+import { Box, Heading, Text } from '@chakra-ui/react';
 import { useGraph } from '@/contexts/GraphContext';
 import { useMode } from '@/contexts/ModeContext';
 import { ConceptNode } from './ConceptNode';
@@ -69,15 +69,24 @@ export function KnowledgeGraph() {
   
   if (!graph || graph.nodes.length === 0) {
     return (
-      <div style={{ 
-        display: 'flex', 
-        alignItems: 'center', 
-        justifyContent: 'center', 
-        height: '100%',
-        color: '#666'
-      }}>
-        Ask a question to generate a knowledge graph
-      </div>
+      <Box
+        display="flex"
+        flexDirection="column"
+        alignItems="center"
+        justifyContent="center"
+        height="100%"
+        bg="gray.50"
+      >
+        <Heading size="xl" color="blue.600" mb={2} fontWeight="bold">
+          Dive
+        </Heading>
+        <Text fontSize="sm" color="gray.600" fontStyle="italic" mb={6}>
+          Searching Redefined
+        </Text>
+        <Text fontSize="md" color="gray.500">
+          Ask a question to generate a knowledge graph
+        </Text>
+      </Box>
     );
   }
   
