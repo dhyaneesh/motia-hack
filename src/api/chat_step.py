@@ -84,20 +84,39 @@ async def handler(req, context):
         answer = await llm_service.generate_answer(question)
         context.logger.info("Generated answer", {"answer_length": len(answer)})
         
-        # 2. Extract concepts from question and answer
-        concepts = await llm_service.extract_concepts(question, answer)
+        # 2. Extract concepts from question and answer (limited to 10 for performance)
+        concepts = await llm_service.extract_concepts(question, answer, max_concepts=10)
         context.logger.info("Extracted concepts", {"concept_count": len(concepts)})
         
-        # 3. Search Tavily for each concept to get references
-        for concept in concepts:
+        # 3. Search Tavily for each concept to get references (parallelized for speed)
+        import asyncio
+        async def fetch_references(concept):
             try:
-                search_results = await tavily_service.search(concept["name"], num_results=3)
-                concept["references"] = search_results
+                # Reduced timeout and results for faster response
+                search_results = await tavily_service.search(concept["name"], num_results=2)  # Reduced from 3 to 2
+                return search_results
             except Exception as e:
                 context.logger.info(f"Tavily search failed for {concept['name']}", {"error": str(e)})
-                concept["references"] = []
+                return []
         
-        # 4. Generate embeddings for all concepts
+        # Fetch all references in parallel with timeout
+        reference_tasks = [fetch_references(concept) for concept in concepts]
+        try:
+            reference_results = await asyncio.wait_for(
+                asyncio.gather(*reference_tasks, return_exceptions=True),
+                timeout=10.0  # 10 second timeout for all searches
+            )
+        except asyncio.TimeoutError:
+            context.logger.warn("Tavily searches timed out, using empty references")
+            reference_results = [[] for _ in concepts]
+        
+        for concept, references in zip(concepts, reference_results):
+            if isinstance(references, Exception):
+                concept["references"] = []
+            else:
+                concept["references"] = references
+        
+        # 4. Generate embeddings for all concepts (batch API for speed)
         embedding_texts = [f"{c['name']} {c.get('description', '')}" for c in concepts]
         embeddings = await embedding_service.get_embeddings(embedding_texts)
         context.logger.info("Generated embeddings", {"embedding_count": len(embeddings)})

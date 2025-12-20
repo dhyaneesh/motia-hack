@@ -30,16 +30,16 @@ async def generate_answer(question: str, context: dict = None) -> str:
         raise Exception(f"Error generating answer: {str(e)}")
 
 
-async def extract_concepts(question: str, answer: str) -> list[dict]:
+async def extract_concepts(question: str, answer: str, max_concepts: int = 10) -> list[dict]:
     """Extract key concepts from question and answer using Gemini."""
     try:
-        prompt = f"""Extract key concepts from this Q&A. Return ONLY a valid JSON array with no markdown formatting:
+        prompt = f"""Extract the {max_concepts} most important key concepts from this Q&A. Return ONLY a valid JSON array with no markdown formatting:
         [{{"id": "unique_id", "name": "concept name", "type": "concept|entity|event|person", "description": "brief description"}}]
         
         Question: {question}
         Answer: {answer}
         
-        Return the JSON array only, no other text."""
+        Limit to the {max_concepts} most important concepts. Return the JSON array only, no other text."""
         
         response = client.models.generate_content(
             model="gemini-2.5-flash",
@@ -55,6 +55,9 @@ async def extract_concepts(question: str, answer: str) -> list[dict]:
             text = text.strip()
         
         concepts = json.loads(text)
+        
+        # Limit to max_concepts to prevent excessive processing
+        concepts = concepts[:max_concepts]
         
         # Ensure each concept has a consistent id format
         for idx, concept in enumerate(concepts):

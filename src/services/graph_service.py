@@ -54,9 +54,12 @@ class GraphService:
                     if self.graph.has_node(concept_id1) and self.graph.has_node(concept_id2):
                         self.graph.add_edge(concept_id1, concept_id2, weight=0.8, type="cluster")
         
-        # Calculate positions using spring layout
+        # Calculate positions using spring layout (optimized iterations based on graph size)
         if len(self.graph.nodes()) > 0:
-            positions = nx.spring_layout(self.graph, k=2, iterations=50, seed=42)
+            # Reduce iterations for smaller graphs to speed up layout
+            num_nodes = len(self.graph.nodes())
+            iterations = min(50, max(20, num_nodes * 3))  # Adaptive: 20-50 iterations
+            positions = nx.spring_layout(self.graph, k=2, iterations=iterations, seed=42)
         else:
             positions = {}
         
@@ -206,7 +209,9 @@ class GraphService:
                 if n == node_id:
                     # Get approximate position from existing nodes
                     if len(self.graph.nodes()) > 1:
-                        positions = nx.spring_layout(self.graph, k=2, iterations=20, seed=42)
+                        num_nodes = len(self.graph.nodes())
+                        iterations = min(20, max(10, num_nodes * 2))  # Faster for expansion
+                        positions = nx.spring_layout(self.graph, k=2, iterations=iterations, seed=42)
                         original_pos = positions.get(node_id, (0, 0))
                     else:
                         original_pos = (0, 0)

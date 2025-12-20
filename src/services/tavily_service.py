@@ -24,7 +24,7 @@ async def search(query: str, num_results: int = 5) -> List[Dict]:
                     "include_raw_content": True,
                     "max_results": num_results,
                 },
-                timeout=30.0
+                timeout=8.0  # Reduced from 30s to 8s for faster failure
             )
             response.raise_for_status()
             data = response.json()

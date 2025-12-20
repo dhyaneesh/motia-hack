@@ -77,12 +77,45 @@ async def get_embedding(text: str) -> List[float]:
 
 
 async def get_embeddings(texts: List[str]) -> List[List[float]]:
-    """Generate embeddings for multiple texts."""
-    embeddings = []
-    for text in texts:
-        embedding = await get_embedding(text)
-        embeddings.append(embedding)
-    return embeddings
+    """Generate embeddings for multiple texts using batch API if available."""
+    if len(texts) == 0:
+        return []
+    
+    try:
+        # Try batch embedding API first (more efficient)
+        result = client.models.embed_content(
+            model="text-embedding-004",
+            contents=texts  # Pass list directly for batch processing
+        )
+        
+        # Extract embeddings from batch result
+        if hasattr(result, 'embeddings'):
+            embeddings_list = result.embeddings
+            embeddings = []
+            for emb in embeddings_list:
+                if hasattr(emb, 'values'):
+                    embeddings.append(list(emb.values))
+                elif hasattr(emb, 'embedding'):
+                    embeddings.append(list(emb.embedding))
+                elif hasattr(emb, '__iter__'):
+                    embeddings.append(list(emb))
+                else:
+                    embeddings.append([emb])
+            return embeddings
+        else:
+            # Fallback to sequential if batch not supported
+            embeddings = []
+            for text in texts:
+                embedding = await get_embedding(text)
+                embeddings.append(embedding)
+            return embeddings
+    except Exception as e:
+        # Fallback to sequential if batch fails
+        embeddings = []
+        for text in texts:
+            embedding = await get_embedding(text)
+            embeddings.append(embedding)
+        return embeddings
 
 
 async def store_embedding(id: str, text: str, metadata: dict = None):
