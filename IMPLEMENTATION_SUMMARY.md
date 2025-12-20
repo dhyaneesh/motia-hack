@@ -8,7 +8,7 @@
 - `pyproject.toml` updated with all required packages:
   - google-generativeai (Gemini LLM)
   - pinecone-client (Vector DB)
-  - exa-py (Exa AI search)
+  - httpx (HTTP client for Tavily API)
   - scikit-learn>=1.3.0 (HDBSCAN clustering)
   - networkx (Graph structure)
   - numpy (Numerical operations)
@@ -16,7 +16,7 @@
 ✅ **Service Layer** (`src/services/`)
 - `llm_service.py` - Gemini LLM integration for answers and concept extraction
 - `embedding_service.py` - Gemini embeddings (text-embedding-004) + Pinecone
-- `exa_service.py` - Exa AI search wrapper
+- `tavily_service.py` - Tavily search wrapper
 - `clustering_service.py` - HDBSCAN clustering implementation
 - `graph_service.py` - NetworkX graph builder with React Flow format output
 
@@ -60,7 +60,7 @@
 1. **Question Processing Flow**
    - User asks question → Gemini generates answer
    - Concepts extracted from Q&A
-   - Exa AI searches for each concept
+   - Tavily searches for each concept
    - Embeddings generated for clustering
    - HDBSCAN clusters concepts by similarity
    - NetworkX builds graph structure
@@ -89,7 +89,7 @@ GEMINI_API_KEY=your_key
 PINECONE_API_KEY=your_key
 PINECONE_ENVIRONMENT=your_env
 PINECONE_INDEX=knowledge-graph
-EXA_API_KEY=your_key
+TAVILY_API_KEY=your_key
 ```
 
 **Frontend** (`frontend/.env.local`):
@@ -143,7 +143,7 @@ hack/
 │   ├── services/
 │   │   ├── llm_service.py
 │   │   ├── embedding_service.py
-│   │   ├── exa_service.py
+│   │   ├── tavily_service.py
 │   │   ├── clustering_service.py
 │   │   └── graph_service.py
 │   └── utils/

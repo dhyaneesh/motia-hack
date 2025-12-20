@@ -4,8 +4,8 @@
   "type": "module",
   "scripts": {
     "postinstall": "motia install",
-    "dev": "motia dev",
-    "start": "motia start",
+    "dev": "cross-env PORT=3000 motia dev",
+    "start": "cross-env PORT=3000 motia start",
     "generate-types": "motia generate-types",
     "build": "motia build",
     "clean": "rm -rf dist node_modules python_modules .motia .mermaid"
@@ -15,5 +15,8 @@
   ],
   "dependencies": {
     "motia": "^0.17.9-beta.191"
+  },
+  "devDependencies": {
+    "cross-env": "^10.1.0"
   }
 }

@@ -16,16 +16,16 @@
     "id": "knowledge-graph-flow",
     "config": {
       "src\\api\\get_node_step.py": {
-        "x": 119,
-        "y": 71
+        "x": 95,
+        "y": 53
       },
       "src\\api\\expand_node_step.py": {
-        "x": -379,
-        "y": 75
+        "x": -357,
+        "y": 59
       },
       "src\\api\\chat_step.py": {
-        "x": 544,
-        "y": 101
+        "x": 526,
+        "y": 64
       }
     }
   }

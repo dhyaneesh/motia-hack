@@ -1,6 +1,6 @@
 import os
 from pydantic import BaseModel
-from src.services import llm_service, exa_service, embedding_service, clustering_service
+from src.services import llm_service, tavily_service, embedding_service, clustering_service
 from src.services.graph_service import graph_service
 
 # Request/Response schemas
@@ -52,13 +52,13 @@ async def handler(req, context):
         concepts = await llm_service.extract_concepts(question, answer)
         context.logger.info("Extracted concepts", {"concept_count": len(concepts)})
         
-        # 3. Search Exa AI for each concept to get references
+        # 3. Search Tavily for each concept to get references
         for concept in concepts:
             try:
-                search_results = await exa_service.search(concept["name"], num_results=3)
+                search_results = await tavily_service.search(concept["name"], num_results=3)
                 concept["references"] = search_results
             except Exception as e:
-                context.logger.info(f"Exa search failed for {concept['name']}", {"error": str(e)})
+                context.logger.info(f"Tavily search failed for {concept['name']}", {"error": str(e)})
                 concept["references"] = []
         
         # 4. Generate embeddings for all concepts
@@ -75,8 +75,29 @@ async def handler(req, context):
         context.logger.info("Built graph", {"node_count": len(graph["nodes"]), "edge_count": len(graph["edges"])})
         
         # 7. Store graph data in Motia state for persistence across requests
+        node_ids_list = list(graph_service.graph.nodes())
+        # Store edges for persistence
+        edges_list = []
+        for u, v, edge_data in graph_service.graph.edges(data=True):
+            edges_list.append({
+                "id": f"{u}-{v}",
+                "source": u,
+                "target": v,
+                "type": "smoothstep",
+                "weight": edge_data.get("weight", 1.0)
+            })
+        
+        context.logger.info("Storing graph state", {
+            "node_data_keys_count": len(graph_service.node_data),
+            "node_data_keys_sample": list(graph_service.node_data.keys())[:5],
+            "graph_nodes_count": len(node_ids_list),
+            "graph_nodes_sample": node_ids_list[:5],
+            "edges_count": len(edges_list)
+        })
+        
         await context.state.set("knowledge_graph", "node_data", graph_service.node_data)
-        await context.state.set("knowledge_graph", "graph_nodes", list(graph_service.graph.nodes()))
+        await context.state.set("knowledge_graph", "graph_nodes", node_ids_list)
+        await context.state.set("knowledge_graph", "graph_edges", edges_list)
         
         return {
             "status": 200,

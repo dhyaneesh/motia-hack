@@ -57,6 +57,13 @@ export function KnowledgeGraph() {
     );
   }
   
+  // Default edge styles
+  const defaultEdgeOptions = {
+    style: { strokeWidth: 2, stroke: '#94a3b8' },
+    type: 'smoothstep',
+    animated: false
+  };
+
   return (
     <ReactFlow
       nodes={nodes}
@@ -65,6 +72,7 @@ export function KnowledgeGraph() {
       onEdgesChange={onEdgesChange}
       onNodeClick={onNodeClick}
       nodeTypes={nodeTypes}
+      defaultEdgeOptions={defaultEdgeOptions}
       fitView
       minZoom={0.1}
       maxZoom={2}

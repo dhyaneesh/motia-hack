@@ -7,7 +7,7 @@
 - API Keys:
   - Gemini API key (Google AI Studio)
   - Pinecone API key
-  - Exa AI API key
+  - Tavily API key
 
 ## Backend Setup
 
@@ -24,7 +24,7 @@ GEMINI_API_KEY=your_gemini_api_key
 PINECONE_API_KEY=your_pinecone_api_key
 PINECONE_ENVIRONMENT=your_pinecone_environment
 PINECONE_INDEX=knowledge-graph
-EXA_API_KEY=your_exa_api_key
+TAVILY_API_KEY=your_tavily_api_key
 ```
 
 3. Create Pinecone index:
@@ -73,7 +73,7 @@ Frontend will run on `http://localhost:3001` (or next available port)
 3. The system will:
    - Generate an answer using Gemini
    - Extract key concepts
-   - Search for related articles using Exa AI
+   - Search for related articles using Tavily
    - Cluster concepts by similarity
    - Visualize as an interactive graph
 4. Click on any node to see:

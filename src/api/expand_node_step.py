@@ -3,7 +3,8 @@ import json
 from pydantic import BaseModel
 from google import genai
 from src.services.graph_service import graph_service
-from src.services import exa_service, llm_service
+from src.services import tavily_service, llm_service
+import numpy as np
 
 # Configure Gemini API client
 client = genai.Client(api_key=os.environ.get("GEMINI_API_KEY"))
@@ -21,7 +22,7 @@ config = {
     "type": "api",
     "path": "/api/nodes/:nodeId/expand",
     "method": "POST",
-    "description": "Expand a knowledge graph node by fetching additional related concepts from external sources. Uses Exa AI to search for related content and extracts new concepts using LLM.",
+    "description": "Expand a knowledge graph node by fetching additional related concepts from external sources. Uses Tavily to search for related content and extracts new concepts using LLM.",
     "emits": [],
     "flows": ["knowledge-graph-flow"],
     "responseSchema": {
@@ -44,17 +45,92 @@ async def handler(req, context):
         
         context.logger.info("Expanding node", {"node_id": node_id})
         
-        # Get current node
+        # Load graph data from Motia state FIRST (before checking for node)
+        node_data = await context.state.get("knowledge_graph", "node_data")
+        graph_nodes = await context.state.get("knowledge_graph", "graph_nodes")
+        
+        # Unwrap node_data if it has a "data" wrapper from Motia state
+        if isinstance(node_data, dict) and "data" in node_data and len(node_data) == 1:
+            node_data = node_data.get("data", {})
+        
+        # Unwrap graph_nodes if it has a "data" wrapper
+        if isinstance(graph_nodes, dict) and "data" in graph_nodes:
+            graph_nodes = graph_nodes.get("data", [])
+        
+        # Convert NumPy arrays to lists if needed (to avoid boolean ambiguity errors)
+        if isinstance(graph_nodes, np.ndarray):
+            graph_nodes = graph_nodes.tolist()
+        
+        # Use isinstance checks first to avoid NumPy array boolean ambiguity
+        if isinstance(node_data, dict) and node_data:
+            graph_service.node_data = node_data
+        if isinstance(graph_nodes, list) and graph_nodes:
+            # Rebuild graph structure
+            import networkx as nx
+            graph_service.graph = nx.Graph()
+            for nid in graph_nodes:
+                if nid in graph_service.node_data:
+                    node_info = graph_service.node_data[nid]
+                    if node_info is None or not isinstance(node_info, dict):
+                        continue
+                    graph_service.graph.add_node(
+                        nid,
+                        name=node_info.get("name", "Unknown"),
+                        description=node_info.get("description", ""),
+                        type=node_info.get("type", "concept"),
+                        cluster_id=node_info.get("cluster_id", "")
+                    )
+            
+            # Try to restore edges from state first
+            stored_edges = await context.state.get("knowledge_graph", "graph_edges")
+            if isinstance(stored_edges, dict) and "data" in stored_edges:
+                stored_edges = stored_edges.get("data", [])
+            
+            edges_restored = False
+            if isinstance(stored_edges, list) and stored_edges:
+                # Restore edges from stored state
+                for edge in stored_edges:
+                    if isinstance(edge, dict):
+                        source = edge.get("source")
+                        target = edge.get("target")
+                        if source and target and graph_service.graph.has_node(source) and graph_service.graph.has_node(target):
+                            weight = edge.get("weight", 0.8)
+                            edge_type = edge.get("type", "cluster")
+                            graph_service.graph.add_edge(source, target, weight=weight, type=edge_type)
+                            edges_restored = True
+            
+            # If edges weren't restored, rebuild them from clusters
+            if not edges_restored:
+                cluster_nodes = {}
+                for nid, data in graph_service.node_data.items():
+                    if data is None or not isinstance(data, dict):
+                        continue
+                    cluster_id = data.get("cluster_id", "")
+                    if cluster_id not in cluster_nodes:
+                        cluster_nodes[cluster_id] = []
+                    cluster_nodes[cluster_id].append(nid)
+                
+                for cluster_id, node_ids in cluster_nodes.items():
+                    for i, nid1 in enumerate(node_ids):
+                        for nid2 in node_ids[i+1:]:
+                            if graph_service.graph.has_node(nid1) and graph_service.graph.has_node(nid2):
+                                graph_service.graph.add_edge(nid1, nid2, weight=0.8, type="cluster")
+        
+        # NOW get current node (after state is loaded)
         node = graph_service.get_node(node_id)
-        if not node:
+        if node is None:
+            context.logger.info("Node not found for expand", {
+                "node_id": node_id,
+                "available_nodes": list(graph_service.node_data.keys())[:10]
+            })
             return {
                 "status": 404,
-                "body": {"error": "Node not found"}
+                "body": {"error": f"Node not found: {node_id}"}
             }
         
-        # Search for more related content using Exa
+        # Search for more related content using Tavily
         search_query = f"{node['name']} {node['description']}"
-        new_results = await exa_service.search(search_query, num_results=5)
+        new_results = await tavily_service.search(search_query, num_results=5)
         
         # Extract new concepts from articles
         article_texts = [r.get("text", "")[:1000] for r in new_results[:3]]  # Limit text length
@@ -100,51 +176,24 @@ async def handler(req, context):
                     "references": [result]
                 })
         
-        # Load graph data from Motia state first
-        node_data = await context.state.get("knowledge_graph", "node_data")
-        graph_nodes = await context.state.get("knowledge_graph", "graph_nodes")
-        
-        if node_data:
-            graph_service.node_data = node_data
-        if graph_nodes:
-            # Rebuild graph structure
-            import networkx as nx
-            graph_service.graph = nx.Graph()
-            for nid in graph_nodes:
-                if nid in graph_service.node_data:
-                    node_info = graph_service.node_data[nid]
-                    if node_info is None or not isinstance(node_info, dict):
-                        continue
-                    graph_service.graph.add_node(
-                        nid,
-                        name=node_info.get("name", "Unknown"),
-                        description=node_info.get("description", ""),
-                        type=node_info.get("type", "concept"),
-                        cluster_id=node_info.get("cluster_id", "")
-                    )
-            
-            # Rebuild edges
-            cluster_nodes = {}
-            for nid, data in graph_service.node_data.items():
-                if data is None or not isinstance(data, dict):
-                    continue
-                cluster_id = data.get("cluster_id", "")
-                if cluster_id not in cluster_nodes:
-                    cluster_nodes[cluster_id] = []
-                cluster_nodes[cluster_id].append(nid)
-            
-            for cluster_id, node_ids in cluster_nodes.items():
-                for i, nid1 in enumerate(node_ids):
-                    for nid2 in node_ids[i+1:]:
-                        if graph_service.graph.has_node(nid1) and graph_service.graph.has_node(nid2):
-                            graph_service.graph.add_edge(nid1, nid2, weight=0.8, type="cluster")
-        
         # Add to graph
         new_nodes, new_edges = graph_service.expand_node(node_id, new_concepts)
         
         # Save updated graph data back to state
+        # Update edges list with new edges
+        edges_list = []
+        for u, v, edge_data in graph_service.graph.edges(data=True):
+            edges_list.append({
+                "id": f"{u}-{v}",
+                "source": u,
+                "target": v,
+                "type": "smoothstep",
+                "weight": edge_data.get("weight", 1.0)
+            })
+        
         await context.state.set("knowledge_graph", "node_data", graph_service.node_data)
         await context.state.set("knowledge_graph", "graph_nodes", list(graph_service.graph.nodes()))
+        await context.state.set("knowledge_graph", "graph_edges", edges_list)
         
         context.logger.info("Expanded node", {
             "node_id": node_id,
