@@ -53,3 +53,29 @@ class GraphData(BaseModel):
     edges: List[GraphEdge]
     clusters: Optional[List[Cluster]] = None
 
+
+class Product(BaseModel):
+    """Product information for shopping mode."""
+    id: str
+    name: str
+    image_url: Optional[str] = None
+    price: Optional[float] = None
+    rating: Optional[float] = None
+    retailer: Optional[str] = None
+    url: Optional[str] = None
+    specs: Optional[Dict[str, Any]] = None
+    review_summary: Optional[str] = None
+    references: List[Reference] = []
+
+
+class StudyConcept(BaseModel):
+    """Concept with study mode metadata."""
+    id: str
+    name: str
+    description: str
+    type: str
+    level: int  # 1=Beginner, 2=Intermediate, 3=Advanced
+    prerequisites: List[str] = []
+    learning_path_position: Optional[int] = None
+    references: List[Reference] = []
+

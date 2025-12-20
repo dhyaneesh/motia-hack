@@ -14,9 +14,11 @@ declare module 'motia' {
   interface Handlers {
     'ProcessGreeting': EventHandler<{ timestamp: string; appName: string; greetingPrefix: string; requestId: string }, never>
     'HelloAPI': ApiRouteHandler<Record<string, unknown>, ApiResponse<200, { message: string; status: string; appName: string }>, { topic: 'process-greeting'; data: { timestamp: string; appName: string; greetingPrefix: string; requestId: string } }>
+    'StudyAPI': ApiRouteHandler<{ question: string }, ApiResponse<200, { answer: string; graph: Record<string, unknown>; clusters: Array<Record<string, unknown>>; learning_path: Array<Record<string, unknown>> }> | ApiResponse<400, { error: string }> | ApiResponse<500, { error: string }>, never>
+    'ShoppingAPI': ApiRouteHandler<{ query: string; num_results?: unknown }, ApiResponse<200, { products: Array<Record<string, unknown>>; graph: Record<string, unknown>; clusters: Array<Record<string, unknown>> }> | ApiResponse<400, { error: string }> | ApiResponse<500, { error: string }>, never>
     'GetNodeDetails': ApiRouteHandler<Record<string, unknown>, ApiResponse<200, { id: string; name: string; description: string; type: string; clusterId: string; references: Array<Record<string, unknown>>; relatedNodes: Array<Record<string, unknown>> }> | ApiResponse<400, { error: string }> | ApiResponse<404, { error: string }> | ApiResponse<500, { error: string }>, never>
     'ExpandNode': ApiRouteHandler<Record<string, unknown>, ApiResponse<200, { newNodes: Array<unknown>; newEdges: Array<unknown> }> | ApiResponse<400, { error: string }> | ApiResponse<404, { error: string }> | ApiResponse<500, { error: string }>, never>
-    'ChatAPI': ApiRouteHandler<{ question: string; context?: Record<string, unknown> }, ApiResponse<200, { answer: string; graph: Record<string, unknown>; clusters: Array<unknown> }> | ApiResponse<400, { error: string }> | ApiResponse<500, { error: string }>, never>
+    'ChatAPI': ApiRouteHandler<{ question: string; context?: Record<string, unknown>; mode?: string; image?: string | unknown }, ApiResponse<200, { answer: string; graph: Record<string, unknown>; clusters: Array<unknown> }> | ApiResponse<400, { error: string }> | ApiResponse<500, { error: string }>, never>
   }
     
 }

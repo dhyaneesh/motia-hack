@@ -54,5 +54,35 @@ export interface SelectedNodeDetails {
   type: string;
   references: Reference[];
   relatedNodes: { id: string; name: string }[];
+  // Product-specific fields
+  imageUrl?: string;
+  price?: number;
+  rating?: number;
+  retailer?: string;
+  url?: string;
+  specs?: Record<string, any>;
+  reviewSummary?: string;
+  // Study-specific fields
+  level?: number;
+  prerequisites?: string[];
+  learningPathPosition?: number;
+}
+
+export type Mode = 'default' | 'shopping' | 'study';
+
+export interface ProductNodeData extends NodeData {
+  imageUrl?: string;
+  price?: number;
+  rating?: number;
+  retailer?: string;
+  url?: string;
+  specs?: Record<string, any>;
+  reviewSummary?: string;
+}
+
+export interface StudyNodeData extends NodeData {
+  level?: number; // 1=Beginner, 2=Intermediate, 3=Advanced
+  prerequisites?: string[];
+  learningPathPosition?: number;
 }
 

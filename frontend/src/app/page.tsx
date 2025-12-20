@@ -25,7 +25,7 @@ export default function Home() {
         <KnowledgeGraph />
       </Box>
       
-      {/* Sidebar - Conditional render */}
+      {/* Sidebar - Unified for all modes */}
       {isSidebarOpen && (
         <Box w="400px" borderLeft="1px" borderColor="gray.200">
           <NodeDetailSidebar />

@@ -1,6 +1,7 @@
 'use client';
-import { createContext, useContext, useState, ReactNode } from 'react';
+import { createContext, useContext, useState, ReactNode, useCallback } from 'react';
 import { GraphData, SelectedNodeDetails, GraphNode, GraphEdge } from '@/types';
+import { Mode } from './ModeContext';
 
 interface GraphContextType {
   graph: GraphData | null;
@@ -10,6 +11,10 @@ interface GraphContextType {
   selectNode: (node: SelectedNodeDetails | null) => void;
   addToGraph: (newNodes: GraphNode[], newEdges: GraphEdge[]) => void;
   clearGraph: () => void;
+  // Mode-specific state preservation
+  savedGraphs: Record<Mode, GraphData | null>;
+  saveGraphForMode: (mode: Mode) => void;
+  restoreGraphForMode: (mode: Mode) => void;
 }
 
 const GraphContext = createContext<GraphContextType | undefined>(undefined);
@@ -17,6 +22,11 @@ const GraphContext = createContext<GraphContextType | undefined>(undefined);
 export function GraphProvider({ children }: { children: ReactNode }) {
   const [graph, setGraph] = useState<GraphData | null>(null);
   const [selectedNode, setSelectedNode] = useState<SelectedNodeDetails | null>(null);
+  const [savedGraphs, setSavedGraphs] = useState<Record<Mode, GraphData | null>>({
+    default: null,
+    shopping: null,
+    study: null
+  });
   
   const selectNode = (node: SelectedNodeDetails | null) => {
     console.log('Setting selected node:', node);
@@ -37,6 +47,22 @@ export function GraphProvider({ children }: { children: ReactNode }) {
     setSelectedNode(null);
   };
   
+  const saveGraphForMode = useCallback((mode: Mode) => {
+    if (graph) {
+      setSavedGraphs(prev => ({ ...prev, [mode]: graph }));
+    }
+  }, [graph]);
+  
+  const restoreGraphForMode = useCallback((mode: Mode) => {
+    const savedGraph = savedGraphs[mode];
+    if (savedGraph) {
+      setGraph(savedGraph);
+    } else {
+      setGraph(null);
+    }
+    setSelectedNode(null);
+  }, [savedGraphs]);
+  
   return (
     <GraphContext.Provider value={{
       graph,
@@ -45,7 +71,10 @@ export function GraphProvider({ children }: { children: ReactNode }) {
       setGraph,
       selectNode,
       addToGraph,
-      clearGraph
+      clearGraph,
+      savedGraphs,
+      saveGraphForMode,
+      restoreGraphForMode
     }}>
       {children}
     </GraphContext.Provider>

@@ -62,22 +62,40 @@ class GraphService:
         
         return self._to_react_flow_format(positions)
     
-    def _to_react_flow_format(self, positions: Dict) -> Dict:
+    def _to_react_flow_format(self, positions: Dict, node_type: str = "conceptNode") -> Dict:
         """Convert NetworkX graph to React Flow format."""
         nodes = []
         for node_id, pos in positions.items():
             data = self.node_data.get(node_id, {})
+            node_data = {
+                "name": data.get("name", "Unknown"),
+                "description": data.get("description", ""),
+                "nodeType": data.get("type", "concept"),
+                "clusterId": data.get("cluster_id", ""),
+                "references": data.get("references", [])
+            }
+            
+            # Add product-specific fields if present
+            if data.get("type") == "product":
+                node_data["imageUrl"] = data.get("image_url")
+                node_data["price"] = data.get("price")
+                node_data["rating"] = data.get("rating")
+                node_data["retailer"] = data.get("retailer")
+                node_data["url"] = data.get("url")
+                node_data["specs"] = data.get("specs", {})
+                node_data["reviewSummary"] = data.get("review_summary")
+            
+            # Add study-specific fields if present
+            if "level" in data:
+                node_data["level"] = data.get("level")
+                node_data["prerequisites"] = data.get("prerequisites", [])
+                node_data["learningPathPosition"] = data.get("learning_path_position")
+            
             nodes.append({
                 "id": node_id,
-                "type": "conceptNode",
+                "type": node_type,
                 "position": {"x": pos[0] * 800, "y": pos[1] * 600},
-                "data": {
-                    "name": data.get("name", "Unknown"),
-                    "description": data.get("description", ""),
-                    "nodeType": data.get("type", "concept"),
-                    "clusterId": data.get("cluster_id", ""),
-                    "references": data.get("references", [])
-                }
+                "data": node_data
             })
         
         edges = []
@@ -221,6 +239,131 @@ class GraphService:
             })
         
         return new_nodes, new_edges
+    
+    def build_product_graph(self, clusters: List[Dict], products: List[Dict]) -> Dict:
+        """Build knowledge graph from product clusters."""
+        # Clear previous graph
+        self.graph = nx.Graph()
+        self.node_data = {}
+        
+        # Create a product lookup
+        product_lookup = {p.get("id"): p for p in products}
+        
+        # Add nodes for each product
+        for cluster in clusters:
+            cluster_id = cluster["id"]
+            for product_id in cluster.get("productIds", []):
+                product = product_lookup.get(product_id)
+                if not product:
+                    continue
+                
+                # Store full node data with product-specific fields
+                self.node_data[product_id] = {
+                    "name": product.get("name", "Unknown"),
+                    "description": product.get("description", ""),
+                    "type": "product",
+                    "cluster_id": cluster_id,
+                    "image_url": product.get("image_url"),
+                    "price": product.get("price"),
+                    "rating": product.get("rating"),
+                    "retailer": product.get("retailer"),
+                    "url": product.get("url"),
+                    "specs": product.get("specs", {}),
+                    "review_summary": product.get("review_summary"),
+                    "references": product.get("references", [])
+                }
+                
+                # Add node to graph
+                self.graph.add_node(
+                    product_id,
+                    name=product.get("name", "Unknown"),
+                    description=product.get("description", ""),
+                    type="product",
+                    cluster_id=cluster_id,
+                    image_url=product.get("image_url"),
+                    price=product.get("price"),
+                    rating=product.get("rating")
+                )
+        
+        # Add edges within clusters (connect products in same cluster)
+        for cluster in clusters:
+            product_ids = cluster.get("productIds", [])
+            # Connect each product to others in the same cluster
+            for i, product_id1 in enumerate(product_ids):
+                for product_id2 in product_ids[i+1:]:
+                    if self.graph.has_node(product_id1) and self.graph.has_node(product_id2):
+                        self.graph.add_edge(product_id1, product_id2, weight=0.8, type="cluster")
+        
+        # Calculate positions using spring layout
+        if len(self.graph.nodes()) > 0:
+            positions = nx.spring_layout(self.graph, k=2, iterations=50, seed=42)
+        else:
+            positions = {}
+        
+        return self._to_react_flow_format(positions, node_type="productNode")
+    
+    def build_study_graph(self, clusters: List[Dict], concepts: List[Dict]) -> Dict:
+        """Build knowledge graph from study concepts with hierarchy levels."""
+        # Clear previous graph
+        self.graph = nx.Graph()
+        self.node_data = {}
+        
+        # Create a concept lookup
+        concept_lookup = {c.get("id"): c for c in concepts}
+        
+        # Add nodes for each concept
+        for cluster in clusters:
+            cluster_id = cluster["id"]
+            for concept_id in cluster.get("conceptIds", []):
+                concept = concept_lookup.get(concept_id)
+                if not concept:
+                    continue
+                
+                # Store full node data with study-specific fields
+                self.node_data[concept_id] = {
+                    "name": concept.get("name", "Unknown"),
+                    "description": concept.get("description", ""),
+                    "type": concept.get("type", "concept"),
+                    "cluster_id": cluster_id,
+                    "level": concept.get("level", 2),  # 1=Beginner, 2=Intermediate, 3=Advanced
+                    "prerequisites": concept.get("prerequisites", []),
+                    "learning_path_position": concept.get("learning_path_position"),
+                    "references": concept.get("references", [])
+                }
+                
+                # Add node to graph
+                self.graph.add_node(
+                    concept_id,
+                    name=concept.get("name", "Unknown"),
+                    description=concept.get("description", ""),
+                    type=concept.get("type", "concept"),
+                    cluster_id=cluster_id,
+                    level=concept.get("level", 2),
+                    prerequisites=concept.get("prerequisites", [])
+                )
+        
+        # Add edges within clusters
+        for cluster in clusters:
+            concept_ids = cluster.get("conceptIds", [])
+            for i, concept_id1 in enumerate(concept_ids):
+                for concept_id2 in concept_ids[i+1:]:
+                    if self.graph.has_node(concept_id1) and self.graph.has_node(concept_id2):
+                        self.graph.add_edge(concept_id1, concept_id2, weight=0.8, type="cluster")
+        
+        # Add prerequisite edges
+        for concept_id, data in self.node_data.items():
+            prerequisites = data.get("prerequisites", [])
+            for prereq_id in prerequisites:
+                if self.graph.has_node(prereq_id) and self.graph.has_node(concept_id):
+                    self.graph.add_edge(prereq_id, concept_id, weight=0.9, type="prerequisite")
+        
+        # Calculate positions using spring layout
+        if len(self.graph.nodes()) > 0:
+            positions = nx.spring_layout(self.graph, k=2, iterations=50, seed=42)
+        else:
+            positions = {}
+        
+        return self._to_react_flow_format(positions, node_type="conceptCard")
 
 
 # Global instance

@@ -6,9 +6,25 @@ const client = axios.create({
 });
 
 export const api = {
-  async chat(question: string): Promise<{ answer: string; graph: GraphData }> {
-    const response = await client.post('/api/chat', { question });
+  async chat(question: string, mode?: string, image?: string): Promise<{ answer: string; graph: GraphData }> {
+    const response = await client.post('/api/chat', { question, mode, image });
     // Motia returns { status, body }, extract body
+    return response.data.body || response.data;
+  },
+  
+  async shopping(query: string, numResults: number = 10): Promise<{ products: any[]; graph: GraphData; clusters: any[] }> {
+    const response = await client.post('/api/shopping', { query, num_results: numResults });
+    return response.data.body || response.data;
+  },
+  
+  async study(question: string): Promise<{ answer: string; graph: GraphData; clusters: any[]; learning_path: any[] }> {
+    const response = await client.post('/api/study', { question });
+    return response.data.body || response.data;
+  },
+  
+  async searchWithImage(imageBase64: string, mode: string): Promise<any> {
+    // Image search can use the chat endpoint with image parameter
+    const response = await client.post('/api/chat', { question: '', mode, image: imageBase64 });
     return response.data.body || response.data;
   },
   

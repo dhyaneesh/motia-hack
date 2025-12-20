@@ -1,12 +1,18 @@
 import os
 from pydantic import BaseModel
+from typing import Optional
 from src.services import llm_service, tavily_service, embedding_service, clustering_service
 from src.services.graph_service import graph_service
+from src.services.mode_service import detect_mode, process_query
+from src.services.image_service import process_image_search
+import base64
 
 # Request/Response schemas
 class ChatRequest(BaseModel):
     question: str
     context: dict = {}
+    mode: str = "default"  # 'default', 'shopping', 'study', or 'auto'
+    image: Optional[str] = None  # base64 encoded image for multi-modal search
 
 class ChatResponse(BaseModel):
     answer: str
@@ -36,13 +42,43 @@ async def handler(req, context):
     try:
         body = req.get("body", {})
         question = body.get("question", "")
-        if not question:
+        mode = body.get("mode", "default")
+        image = body.get("image")
+        
+        if not question and not image:
             return {
                 "status": 400,
-                "body": {"error": "Question is required"}
+                "body": {"error": "Question or image is required"}
             }
         
-        context.logger.info("Processing question", {"question": question})
+        # Auto-detect mode if 'auto' or process mode
+        if mode == "auto" or not mode:
+            mode = detect_mode(question) if question else "default"
+        
+        context.logger.info("Processing request", {
+            "question": question[:100] if question else None,
+            "mode": mode,
+            "has_image": image is not None
+        })
+        
+        # Route to mode-specific processing (for now, default behavior)
+        # Shopping and Study modes will have their own endpoints
+        if mode == "shopping" or mode == "study":
+            # For now, return a message directing to specific endpoints
+            # In future, we can route here or keep separate endpoints
+            context.logger.info(f"Mode {mode} detected, but using default processing for now")
+        
+        # Process image if provided
+        if image:
+            try:
+                image_bytes = base64.b64decode(image)
+                image_result = await process_image_search(image_bytes, mode)
+                # Use extracted query from image
+                if image_result.get("search_query"):
+                    question = image_result["search_query"]
+                    context.logger.info("Processed image search", {"extracted_query": question})
+            except Exception as e:
+                context.logger.info("Image processing failed", {"error": str(e)})
         
         # 1. Generate answer using Gemini
         answer = await llm_service.generate_answer(question)
