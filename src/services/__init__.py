@@ -4,6 +4,8 @@ from . import llm_service
 from . import tavily_service
 from . import embedding_service
 from . import clustering_service
+from . import serpapi_service
+from . import product_service
 from .graph_service import graph_service
 
 __all__ = [
@@ -11,5 +13,7 @@ __all__ = [
     "tavily_service",
     "embedding_service",
     "clustering_service",
+    "serpapi_service",
+    "product_service",
     "graph_service",
 ]

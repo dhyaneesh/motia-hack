@@ -1,6 +1,8 @@
 import networkx as nx
 from typing import Dict, List, Optional
 import uuid
+import numpy as np
+from sklearn.metrics.pairwise import cosine_similarity
 
 
 class GraphService:
@@ -10,14 +12,74 @@ class GraphService:
         self.graph = nx.Graph()
         self.node_data = {}  # Store full node data separately
     
-    def build_graph(self, clusters: List[Dict], concepts: List[Dict]) -> Dict:
-        """Build knowledge graph from clusters and concepts."""
+    def _build_knn_edges(self, embeddings: List[List[float]], node_ids: List[str], k: int = 2) -> List[tuple]:
+        """
+        Build edges using K-nearest neighbors based on embedding similarity.
+        
+        Args:
+            embeddings: List of embedding vectors (one per node)
+            node_ids: List of node IDs corresponding to embeddings
+            k: Number of nearest neighbors to connect (default: 2)
+            
+        Returns:
+            List of (source_id, target_id) tuples representing edges
+        """
+        if len(embeddings) != len(node_ids) or len(embeddings) < 2:
+            return []
+        
+        # Convert to numpy array for efficient computation
+        embedding_matrix = np.array(embeddings)
+        
+        # Calculate cosine similarity matrix
+        similarity_matrix = cosine_similarity(embedding_matrix)
+        
+        # For each node, find its k nearest neighbors (excluding itself)
+        edges = []
+        edge_set = set()  # To deduplicate edges
+        
+        for i, node_id in enumerate(node_ids):
+            # Get similarities for this node (excluding itself)
+            similarities = similarity_matrix[i].copy()
+            similarities[i] = -1  # Set self-similarity to -1 to exclude it
+            
+            # Find k nearest neighbors
+            top_k_indices = np.argsort(similarities)[-k:][::-1]  # Get top k, descending order
+            
+            for neighbor_idx in top_k_indices:
+                if neighbor_idx == i:  # Skip self
+                    continue
+                neighbor_id = node_ids[neighbor_idx]
+                
+                # Create edge tuple (normalized to avoid duplicates)
+                edge = tuple(sorted([node_id, neighbor_id]))
+                if edge not in edge_set:
+                    edge_set.add(edge)
+                    edges.append((node_id, neighbor_id))
+        
+        return edges
+    
+    def build_graph(self, clusters: List[Dict], concepts: List[Dict], embeddings: Optional[List[List[float]]] = None, k: int = 2) -> Dict:
+        """Build knowledge graph from clusters and concepts.
+        
+        Args:
+            clusters: List of cluster dictionaries
+            concepts: List of concept dictionaries
+            embeddings: Optional list of embedding vectors for KNN edge building
+            k: Number of nearest neighbors when using embeddings (default: 2)
+        """
         # Clear previous graph
         self.graph = nx.Graph()
         self.node_data = {}
         
         # Create a concept lookup
         concept_lookup = {c.get("id"): c for c in concepts}
+        
+        # Collect all concept IDs in order
+        all_concept_ids = []
+        for cluster in clusters:
+            for concept_id in cluster.get("conceptIds", []):
+                if concept_id not in all_concept_ids and concept_lookup.get(concept_id):
+                    all_concept_ids.append(concept_id)
         
         # Add nodes for each concept
         for cluster in clusters:
@@ -45,14 +107,36 @@ class GraphService:
                     cluster_id=cluster_id
                 )
         
-        # Add edges within clusters (connect concepts in same cluster)
-        for cluster in clusters:
-            concept_ids = cluster.get("conceptIds", [])
-            # Connect each concept to others in the same cluster
-            for i, concept_id1 in enumerate(concept_ids):
-                for concept_id2 in concept_ids[i+1:]:
-                    if self.graph.has_node(concept_id1) and self.graph.has_node(concept_id2):
-                        self.graph.add_edge(concept_id1, concept_id2, weight=0.8, type="cluster")
+        # Build edges using KNN if embeddings provided, otherwise use cluster-based edges
+        if embeddings and len(embeddings) == len(concepts):
+            # Create mapping from concept ID to embedding index (embeddings match concepts order)
+            concept_id_to_idx = {c.get("id"): idx for idx, c in enumerate(concepts)}
+            
+            # Get embeddings and IDs for nodes that exist in the graph
+            ordered_embeddings = []
+            ordered_ids = []
+            for concept_id in all_concept_ids:
+                if concept_id in concept_id_to_idx and self.graph.has_node(concept_id):
+                    ordered_embeddings.append(embeddings[concept_id_to_idx[concept_id]])
+                    ordered_ids.append(concept_id)
+            
+            # Build KNN edges if we have enough nodes
+            if len(ordered_embeddings) >= 2:
+                knn_edges = self._build_knn_edges(ordered_embeddings, ordered_ids, k=k)
+                
+                # Add KNN edges to graph
+                for source_id, target_id in knn_edges:
+                    if self.graph.has_node(source_id) and self.graph.has_node(target_id):
+                        self.graph.add_edge(source_id, target_id, weight=0.8, type="knn")
+        else:
+            # Fall back to cluster-based edges
+            for cluster in clusters:
+                concept_ids = cluster.get("conceptIds", [])
+                # Connect each concept to others in the same cluster
+                for i, concept_id1 in enumerate(concept_ids):
+                    for concept_id2 in concept_ids[i+1:]:
+                        if self.graph.has_node(concept_id1) and self.graph.has_node(concept_id2):
+                            self.graph.add_edge(concept_id1, concept_id2, weight=0.8, type="cluster")
         
         # Calculate positions using spring layout (optimized iterations based on graph size)
         if len(self.graph.nodes()) > 0:
@@ -179,80 +263,132 @@ class GraphService:
         new_nodes = []
         new_edges = []
         
+        # Get parent cluster_id safely (convert from NumPy if needed)
+        try:
+            parent_node_data = self.node_data.get(node_id, {})
+            parent_cluster_id = parent_node_data.get("cluster_id", "")
+            
+            # Check type and convert if needed
+            if isinstance(parent_cluster_id, np.ndarray):
+                parent_cluster_id = parent_cluster_id.tolist()
+            
+            # Convert to string
+            if isinstance(parent_cluster_id, list):
+                parent_cluster_id = str(parent_cluster_id[0]) if parent_cluster_id else ""
+            else:
+                parent_cluster_id = str(parent_cluster_id) if parent_cluster_id else ""
+        except Exception as e:
+            print(f"Error getting parent_cluster_id: {e}, type: {type(self.node_data.get(node_id, {}).get('cluster_id'))}")
+            parent_cluster_id = ""
+        
         for concept in new_concepts:
-            concept_id = concept.get("id", f"concept_{uuid.uuid4().hex[:8]}")
-            
-            # Add to node data
-            self.node_data[concept_id] = {
-                "name": concept.get("name", "Unknown"),
-                "description": concept.get("description", ""),
-                "type": concept.get("type", "concept"),
-                "cluster_id": self.node_data[node_id]["cluster_id"],
-                "references": concept.get("references", [])
-            }
-            
-            # Add to graph
-            self.graph.add_node(
-                concept_id,
-                name=concept.get("name", "Unknown"),
-                description=concept.get("description", ""),
-                type=concept.get("type", "concept"),
-                cluster_id=self.node_data[node_id]["cluster_id"]
-            )
-            
-            # Connect to original node
-            self.graph.add_edge(node_id, concept_id, weight=0.7, type="expanded")
+            try:
+                concept_id = concept.get("id", f"concept_{uuid.uuid4().hex[:8]}")
+                
+                # Ensure references is a list, not a NumPy array
+                references = concept.get("references", [])
+                if isinstance(references, np.ndarray):
+                    references = references.tolist()
+                
+                # Add to node data
+                self.node_data[concept_id] = {
+                    "name": str(concept.get("name", "Unknown")),
+                    "description": str(concept.get("description", "")),
+                    "type": str(concept.get("type", "concept")),
+                    "cluster_id": parent_cluster_id,
+                    "references": references
+                }
+                
+                # Add to graph
+                self.graph.add_node(
+                    concept_id,
+                    name=str(concept.get("name", "Unknown")),
+                    description=str(concept.get("description", "")),
+                    type=str(concept.get("type", "concept")),
+                    cluster_id=parent_cluster_id
+                )
+                
+                # Connect to original node
+                self.graph.add_edge(node_id, concept_id, weight=0.7, type="expanded")
+            except Exception as e:
+                print(f"Error processing concept {concept.get('name', 'unknown')}: {e}")
+                continue
             
             # Calculate position relative to original node
-            original_pos = None
-            for n in self.graph.nodes():
-                if n == node_id:
-                    # Get approximate position from existing nodes
-                    if len(self.graph.nodes()) > 1:
-                        num_nodes = len(self.graph.nodes())
-                        iterations = min(20, max(10, num_nodes * 2))  # Faster for expansion
-                        positions = nx.spring_layout(self.graph, k=2, iterations=iterations, seed=42)
-                        original_pos = positions.get(node_id, (0, 0))
-                    else:
-                        original_pos = (0, 0)
-                    break
-            
-            new_pos = {
-                "x": (original_pos[0] if original_pos else 0) * 800 + 200,
-                "y": (original_pos[1] if original_pos else 0) * 600 + 200
-            }
-            
-            new_nodes.append({
-                "id": concept_id,
-                "type": "conceptNode",
-                "position": new_pos,
-                "data": {
-                    "name": concept.get("name", "Unknown"),
-                    "description": concept.get("description", ""),
-                    "nodeType": concept.get("type", "concept"),
-                    "clusterId": self.node_data[node_id]["cluster_id"],
-                    "references": concept.get("references", [])
+            try:
+                original_pos = None
+                for n in self.graph.nodes():
+                    if n == node_id:
+                        # Get approximate position from existing nodes
+                        if len(self.graph.nodes()) > 1:
+                            num_nodes = len(self.graph.nodes())
+                            iterations = min(20, max(10, num_nodes * 2))  # Faster for expansion
+                            positions = nx.spring_layout(self.graph, k=2, iterations=iterations, seed=42)
+                            original_pos = positions.get(node_id, (0, 0))
+                        else:
+                            original_pos = (0, 0)
+                        break
+                
+                if original_pos is None:
+                    original_pos = (0, 0)
+                
+                new_pos = {
+                    "x": float(original_pos[0]) * 800 + 200,
+                    "y": float(original_pos[1]) * 600 + 200
                 }
-            })
+            except Exception as e:
+                print(f"Error calculating position: {e}")
+                new_pos = {"x": 200, "y": 200}
             
-            new_edges.append({
-                "id": f"{node_id}-{concept_id}",
-                "source": node_id,
-                "target": concept_id,
-                "type": "smoothstep",
-                "weight": 0.7
-            })
+            try:
+                new_nodes.append({
+                    "id": concept_id,
+                    "type": "conceptNode",
+                    "position": new_pos,
+                    "data": {
+                        "name": str(concept.get("name", "Unknown")),
+                        "description": str(concept.get("description", "")),
+                        "nodeType": str(concept.get("type", "concept")),
+                        "clusterId": parent_cluster_id,
+                        "references": references
+                    }
+                })
+                
+                new_edges.append({
+                    "id": f"{node_id}-{concept_id}",
+                    "source": node_id,
+                    "target": concept_id,
+                    "type": "smoothstep",
+                    "weight": 0.7
+                })
+            except Exception as e:
+                print(f"Error creating node/edge data structures: {e}")
+                continue
         
         return new_nodes, new_edges
     
-    def build_product_graph(self, clusters: List[Dict], products: List[Dict]) -> Dict:
-        """Build knowledge graph from product clusters."""
+    def build_product_graph(self, clusters: List[Dict], products: List[Dict], embeddings: Optional[List[List[float]]] = None, k: int = 2) -> Dict:
+        """Build knowledge graph from product clusters.
+        
+        Args:
+            clusters: List of cluster dictionaries
+            products: List of product dictionaries
+            embeddings: Optional list of embedding vectors for KNN edge building
+            k: Number of nearest neighbors when using embeddings (default: 2)
+        """
         # Clear previous graph
         self.graph = nx.Graph()
         self.node_data = {}
         
         # Create a product lookup
         product_lookup = {p.get("id"): p for p in products}
+        
+        # Collect all product IDs in order
+        all_product_ids = []
+        for cluster in clusters:
+            for product_id in cluster.get("productIds", []):
+                if product_id not in all_product_ids and product_lookup.get(product_id):
+                    all_product_ids.append(product_id)
         
         # Add nodes for each product
         for cluster in clusters:
@@ -290,14 +426,36 @@ class GraphService:
                     rating=product.get("rating")
                 )
         
-        # Add edges within clusters (connect products in same cluster)
-        for cluster in clusters:
-            product_ids = cluster.get("productIds", [])
-            # Connect each product to others in the same cluster
-            for i, product_id1 in enumerate(product_ids):
-                for product_id2 in product_ids[i+1:]:
-                    if self.graph.has_node(product_id1) and self.graph.has_node(product_id2):
-                        self.graph.add_edge(product_id1, product_id2, weight=0.8, type="cluster")
+        # Build edges using KNN if embeddings provided, otherwise use cluster-based edges
+        if embeddings and len(embeddings) == len(products):
+            # Create mapping from product ID to embedding index (embeddings match products order)
+            product_id_to_idx = {p.get("id"): idx for idx, p in enumerate(products)}
+            
+            # Get embeddings and IDs for nodes that exist in the graph
+            ordered_embeddings = []
+            ordered_ids = []
+            for product_id in all_product_ids:
+                if product_id in product_id_to_idx and self.graph.has_node(product_id):
+                    ordered_embeddings.append(embeddings[product_id_to_idx[product_id]])
+                    ordered_ids.append(product_id)
+            
+            # Build KNN edges if we have enough nodes
+            if len(ordered_embeddings) >= 2:
+                knn_edges = self._build_knn_edges(ordered_embeddings, ordered_ids, k=k)
+                
+                # Add KNN edges to graph
+                for source_id, target_id in knn_edges:
+                    if self.graph.has_node(source_id) and self.graph.has_node(target_id):
+                        self.graph.add_edge(source_id, target_id, weight=0.8, type="knn")
+        else:
+            # Fall back to cluster-based edges
+            for cluster in clusters:
+                product_ids = cluster.get("productIds", [])
+                # Connect each product to others in the same cluster
+                for i, product_id1 in enumerate(product_ids):
+                    for product_id2 in product_ids[i+1:]:
+                        if self.graph.has_node(product_id1) and self.graph.has_node(product_id2):
+                            self.graph.add_edge(product_id1, product_id2, weight=0.8, type="cluster")
         
         # Calculate positions using spring layout
         if len(self.graph.nodes()) > 0:
@@ -307,14 +465,28 @@ class GraphService:
         
         return self._to_react_flow_format(positions, node_type="productNode")
     
-    def build_study_graph(self, clusters: List[Dict], concepts: List[Dict]) -> Dict:
-        """Build knowledge graph from study concepts with hierarchy levels."""
+    def build_study_graph(self, clusters: List[Dict], concepts: List[Dict], embeddings: Optional[List[List[float]]] = None, k: int = 2) -> Dict:
+        """Build knowledge graph from study concepts with hierarchy levels.
+        
+        Args:
+            clusters: List of cluster dictionaries
+            concepts: List of concept dictionaries
+            embeddings: Optional list of embedding vectors for KNN edge building
+            k: Number of nearest neighbors when using embeddings (default: 2)
+        """
         # Clear previous graph
         self.graph = nx.Graph()
         self.node_data = {}
         
         # Create a concept lookup
         concept_lookup = {c.get("id"): c for c in concepts}
+        
+        # Collect all concept IDs in order
+        all_concept_ids = []
+        for cluster in clusters:
+            for concept_id in cluster.get("conceptIds", []):
+                if concept_id not in all_concept_ids and concept_lookup.get(concept_id):
+                    all_concept_ids.append(concept_id)
         
         # Add nodes for each concept
         for cluster in clusters:
@@ -347,15 +519,37 @@ class GraphService:
                     prerequisites=concept.get("prerequisites", [])
                 )
         
-        # Add edges within clusters
-        for cluster in clusters:
-            concept_ids = cluster.get("conceptIds", [])
-            for i, concept_id1 in enumerate(concept_ids):
-                for concept_id2 in concept_ids[i+1:]:
-                    if self.graph.has_node(concept_id1) and self.graph.has_node(concept_id2):
-                        self.graph.add_edge(concept_id1, concept_id2, weight=0.8, type="cluster")
+        # Build edges using KNN if embeddings provided, otherwise use cluster-based edges
+        if embeddings and len(embeddings) == len(concepts):
+            # Create mapping from concept ID to embedding index (embeddings match concepts order)
+            concept_id_to_idx = {c.get("id"): idx for idx, c in enumerate(concepts)}
+            
+            # Get embeddings and IDs for nodes that exist in the graph
+            ordered_embeddings = []
+            ordered_ids = []
+            for concept_id in all_concept_ids:
+                if concept_id in concept_id_to_idx and self.graph.has_node(concept_id):
+                    ordered_embeddings.append(embeddings[concept_id_to_idx[concept_id]])
+                    ordered_ids.append(concept_id)
+            
+            # Build KNN edges if we have enough nodes
+            if len(ordered_embeddings) >= 2:
+                knn_edges = self._build_knn_edges(ordered_embeddings, ordered_ids, k=k)
+                
+                # Add KNN edges to graph
+                for source_id, target_id in knn_edges:
+                    if self.graph.has_node(source_id) and self.graph.has_node(target_id):
+                        self.graph.add_edge(source_id, target_id, weight=0.8, type="knn")
+        else:
+            # Fall back to cluster-based edges
+            for cluster in clusters:
+                concept_ids = cluster.get("conceptIds", [])
+                for i, concept_id1 in enumerate(concept_ids):
+                    for concept_id2 in concept_ids[i+1:]:
+                        if self.graph.has_node(concept_id1) and self.graph.has_node(concept_id2):
+                            self.graph.add_edge(concept_id1, concept_id2, weight=0.8, type="cluster")
         
-        # Add prerequisite edges
+        # Add prerequisite edges (always added, regardless of KNN/cluster edges)
         for concept_id, data in self.node_data.items():
             prerequisites = data.get("prerequisites", [])
             for prereq_id in prerequisites:

@@ -3,6 +3,12 @@ from pydantic import BaseModel
 from typing import List, Dict, Optional
 from src.services import serpapi_service, product_service, embedding_service, clustering_service
 from src.services.graph_service import graph_service
+import sys
+from pathlib import Path
+
+# Add middlewares directory to path
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+from middlewares.timing_middleware import create_timing_middleware
 
 # Request/Response schemas
 class ShoppingRequest(BaseModel):
@@ -25,6 +31,7 @@ config = {
     "description": "Search for products and return an interactive product graph visualization with images, prices, ratings, and specifications.",
     "emits": [],
     "flows": ["shopping-flow"],
+    "middleware": [create_timing_middleware("ShoppingAPI")],
     "bodySchema": ShoppingRequest.model_json_schema(),
     "responseSchema": {
         200: ShoppingResponse.model_json_schema(),
@@ -105,8 +112,8 @@ async def handler(req, context):
         clusters = await product_service.cluster_products_by_similarity(products)
         context.logger.info("Clustered products", {"cluster_count": len(clusters)})
         
-        # 5. Build graph with product nodes
-        graph = graph_service.build_product_graph(clusters, products)
+        # 5. Build graph with product nodes using KNN edges
+        graph = graph_service.build_product_graph(clusters, products, embeddings=embeddings, k=2)
         context.logger.info("Built product graph", {
             "node_count": len(graph["nodes"]),
             "edge_count": len(graph["edges"])

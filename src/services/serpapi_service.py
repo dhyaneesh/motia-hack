@@ -2,12 +2,27 @@
 import os
 from dotenv import load_dotenv
 from typing import List, Dict, Optional
-from serpapi import GoogleSearch
 
 # Load environment variables
 load_dotenv()
 
 SERPAPI_API_KEY = os.environ.get("SERPAPI_API_KEY")
+
+# Lazy import to avoid breaking flow collection if package is not installed
+def _get_google_search():
+    """Lazy import of GoogleSearch to avoid import errors during flow collection."""
+    try:
+        from serpapi import GoogleSearch
+        return GoogleSearch
+    except ImportError:
+        # Try alternative import path
+        try:
+            from serpapi.google_search import GoogleSearch
+            return GoogleSearch
+        except ImportError:
+            raise ImportError(
+                "serpapi package not found. Install it with: pip install google-search-results"
+            )
 
 
 async def search_products(query: str, num_results: int = 10) -> List[Dict]:
@@ -25,6 +40,7 @@ async def search_products(query: str, num_results: int = 10) -> List[Dict]:
         raise Exception("SERPAPI_API_KEY not found in environment variables")
     
     try:
+        GoogleSearch = _get_google_search()
         params = {
             "q": query,
             "tbm": "shop",  # Shopping search
@@ -109,6 +125,7 @@ async def get_product_images(query: str, num_images: int = 5) -> List[str]:
         raise Exception("SERPAPI_API_KEY not found in environment variables")
     
     try:
+        GoogleSearch = _get_google_search()
         params = {
             "q": query,
             "tbm": "isch",  # Image search

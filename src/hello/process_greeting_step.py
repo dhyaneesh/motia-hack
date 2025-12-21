@@ -1,5 +1,11 @@
 import asyncio
 from datetime import datetime, timezone
+import sys
+from pathlib import Path
+
+# Add middlewares directory to path
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+from middlewares.timing_wrapper import with_timing
 
 # Optional: Using Pydantic for validation (remove if not using Pydantic)
 try:
@@ -36,6 +42,7 @@ config = {
     "input": input_schema
 }
 
+@with_timing("ProcessGreeting")
 async def handler(input_data, context):
     # Extract data from input
     timestamp = input_data.get("timestamp")

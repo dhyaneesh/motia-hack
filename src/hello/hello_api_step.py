@@ -2,6 +2,12 @@ import os
 import random
 import string
 from datetime import datetime, timezone
+import sys
+from pathlib import Path
+
+# Add middlewares directory to path
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+from middlewares.timing_middleware import create_timing_middleware
 
 # Optional: Using Pydantic for validation (remove if not using Pydantic)
 try:
@@ -38,6 +44,7 @@ config = {
     "description": "Receives hello request and emits event for processing",
     "emits": ["process-greeting"],
     "flows": ["hello-world-flow"],
+    "middleware": [create_timing_middleware("HelloAPI")],
     "responseSchema": response_schema
 }
 

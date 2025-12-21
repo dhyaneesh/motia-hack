@@ -1,6 +1,12 @@
 from pydantic import BaseModel
 from typing import List, Dict, Any
 from src.services.graph_service import graph_service
+import sys
+from pathlib import Path
+
+# Add middlewares directory to path
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+from middlewares.timing_middleware import create_timing_middleware
 
 # Response schemas
 class NodeDetailsResponse(BaseModel):
@@ -23,6 +29,7 @@ config = {
     "description": "Retrieve detailed information about a specific knowledge graph node including its metadata, references, and related nodes. Used for displaying node details in the sidebar.",
     "emits": [],
     "flows": ["knowledge-graph-flow"],
+    "middleware": [create_timing_middleware("GetNodeDetails")],
     "responseSchema": {
         200: NodeDetailsResponse.model_json_schema(),
         400: ErrorResponse.model_json_schema(),

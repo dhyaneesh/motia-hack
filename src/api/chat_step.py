@@ -6,6 +6,12 @@ from src.services.graph_service import graph_service
 from src.services.mode_service import detect_mode, process_query
 from src.services.image_service import process_image_search
 import base64
+import sys
+from pathlib import Path
+
+# Add middlewares directory to path
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+from middlewares.timing_middleware import create_timing_middleware
 
 # Request/Response schemas
 class ChatRequest(BaseModel):
@@ -30,6 +36,7 @@ config = {
     "description": "Process a question using AI and return an answer with an interactive knowledge graph visualization. Extracts concepts, generates embeddings, clusters related concepts, and builds a graph structure.",
     "emits": [],
     "flows": ["knowledge-graph-flow"],
+    "middleware": [create_timing_middleware("ChatAPI")],
     "bodySchema": ChatRequest.model_json_schema(),
     "responseSchema": {
         200: ChatResponse.model_json_schema(),
@@ -125,8 +132,8 @@ async def handler(req, context):
         clusters = await clustering_service.cluster_concepts(embeddings, concepts)
         context.logger.info("Clustered concepts", {"cluster_count": len(clusters)})
         
-        # 6. Build graph from clusters and concepts
-        graph = graph_service.build_graph(clusters, concepts)
+        # 6. Build graph from clusters and concepts with KNN edges
+        graph = graph_service.build_graph(clusters, concepts, embeddings=embeddings, k=2)
         context.logger.info("Built graph", {"node_count": len(graph["nodes"]), "edge_count": len(graph["edges"])})
         
         # 7. Store graph data in Motia state for persistence across requests

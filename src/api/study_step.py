@@ -4,6 +4,12 @@ from typing import List, Dict
 from src.services import llm_service, tavily_service, embedding_service, clustering_service
 from src.services.study_service import assign_concept_level, build_learning_path, identify_prerequisites
 from src.services.graph_service import graph_service
+import sys
+from pathlib import Path
+
+# Add middlewares directory to path
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+from middlewares.timing_middleware import create_timing_middleware
 
 # Request/Response schemas
 class StudyRequest(BaseModel):
@@ -26,6 +32,7 @@ config = {
     "description": "Process a study question and return concepts organized by hierarchy levels with learning paths and prerequisites.",
     "emits": [],
     "flows": ["study-flow"],
+    "middleware": [create_timing_middleware("StudyAPI")],
     "bodySchema": StudyRequest.model_json_schema(),
     "responseSchema": {
         200: StudyResponse.model_json_schema(),
@@ -101,8 +108,8 @@ async def handler(req, context):
         clusters = await clustering_service.cluster_concepts(embeddings, concepts)
         context.logger.info("Clustered concepts", {"cluster_count": len(clusters)})
         
-        # 9. Build graph with level information
-        graph = graph_service.build_study_graph(clusters, concepts)
+        # 9. Build graph with level information using KNN edges
+        graph = graph_service.build_study_graph(clusters, concepts, embeddings=embeddings, k=2)
         context.logger.info("Built study graph", {
             "node_count": len(graph["nodes"]),
             "edge_count": len(graph["edges"])
