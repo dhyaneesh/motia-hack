@@ -57,33 +57,132 @@ export function ChatInterface() {
     setIsLoading(true);
     
     try {
-      let response;
+      let initialResponse;
+      let requestId: string;
       
       // Route to mode-specific endpoints
       if (currentMode === 'shopping') {
-        response = await api.shopping(currentQuestion || 'products');
-        // Transform shopping response to match expected format
-        response = {
-          answer: `Found ${response.products.length} products`,
-          graph: response.graph
+        initialResponse = await api.shopping(currentQuestion || 'products');
+        requestId = initialResponse.requestId;
+        // Show immediate response
+        const assistantMessage: ChatMessage = { 
+          role: 'assistant', 
+          content: 'Searching for products...' 
         };
+        setMessages(prev => [...prev, assistantMessage]);
+        
+        // Poll for completion
+        try {
+          const status = await api.pollChatStatus(requestId, (status) => {
+            // Update message with progress
+            if (status.status === 'processing') {
+              setMessages(prev => {
+                const updated = [...prev];
+                const lastMsg = updated[updated.length - 1];
+                if (lastMsg && lastMsg.role === 'assistant') {
+                  lastMsg.content = 'Processing products...';
+                }
+                return updated;
+              });
+            }
+          });
+          
+          if (status.status === 'completed' && status.graph) {
+            setGraph(status.graph);
+            setMessages(prev => {
+              const updated = [...prev];
+              const lastMsg = updated[updated.length - 1];
+              if (lastMsg && lastMsg.role === 'assistant') {
+                lastMsg.content = `Found products. Graph ready!`;
+              }
+              return updated;
+            });
+          }
+        } catch (pollError: any) {
+          console.error('Polling error:', pollError);
+        }
       } else if (currentMode === 'study') {
-        response = await api.study(currentQuestion);
+        initialResponse = await api.study(currentQuestion);
+        requestId = initialResponse.requestId;
+        
+        // Show answer immediately
+        const assistantMessage: ChatMessage = { 
+          role: 'assistant', 
+          content: initialResponse.answer 
+        };
+        setMessages(prev => [...prev, assistantMessage]);
+        
+        // Poll for graph completion
+        try {
+          const status = await api.pollChatStatus(requestId, (status) => {
+            // Optional: show progress updates
+          });
+          
+          if (status.status === 'completed' && status.graph) {
+            setGraph(status.graph);
+          }
+        } catch (pollError: any) {
+          console.error('Polling error:', pollError);
+        }
       } else {
         // Default mode - pass previous query for continuous graph building
-        response = await api.chat(currentQuestion, currentMode, imageBase64 || undefined, previousQuery);
-      }
-      
-      const assistantMessage: ChatMessage = { 
-        role: 'assistant', 
-        content: response.answer 
-      };
-      setMessages(prev => [...prev, assistantMessage]);
-      
-      // Update graph - backend now returns merged graph with all nodes
-      if (response.graph) {
-        // Backend handles merging, so we just set the complete graph
-        setGraph(response.graph);
+        initialResponse = await api.chat(currentQuestion, currentMode, imageBase64 || undefined, previousQuery);
+        requestId = initialResponse.requestId;
+        
+        // Show answer immediately
+        const assistantMessage: ChatMessage = { 
+          role: 'assistant', 
+          content: initialResponse.answer 
+        };
+        setMessages(prev => [...prev, assistantMessage]);
+        
+        // Poll for graph completion
+        try {
+          const status = await api.pollChatStatus(requestId, (status) => {
+            // Optional: show progress updates in UI
+            if (status.status === 'processing') {
+              setMessages(prev => {
+                const updated = [...prev];
+                const lastMsg = updated[updated.length - 1];
+                if (lastMsg && lastMsg.role === 'assistant') {
+                  lastMsg.content = `${initialResponse.answer}\n\n[Building knowledge graph...]`;
+                }
+                return updated;
+              });
+            }
+          });
+          
+          if (status.status === 'completed' && status.graph) {
+            // Backend handles merging, so we just set the complete graph
+            setGraph(status.graph);
+            // Update message to remove processing indicator
+            setMessages(prev => {
+              const updated = [...prev];
+              const lastMsg = updated[updated.length - 1];
+              if (lastMsg && lastMsg.role === 'assistant') {
+                lastMsg.content = initialResponse.answer;
+              }
+              return updated;
+            });
+          } else if (status.status === 'failed') {
+            toast({
+              title: 'Error',
+              description: status.error || 'Failed to build graph',
+              status: 'error',
+              duration: 5000,
+              isClosable: true
+            });
+          }
+        } catch (pollError: any) {
+          console.error('Polling error:', pollError);
+          toast({
+            title: 'Warning',
+            description: 'Graph building may still be in progress',
+            status: 'warning',
+            duration: 3000,
+            isClosable: true
+          });
+        }
       }
       
       // Clear image after use

@@ -1,10 +1,6 @@
-import os
-import json
 from pydantic import BaseModel
-from google import genai
-from src.services.graph_service import graph_service
-from src.services import tavily_service, llm_service
-import numpy as np
+from src.utils.state_keys import StateKeys
+import uuid
 import sys
 from pathlib import Path
 
@@ -12,13 +8,10 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 from middlewares.timing_middleware import create_timing_middleware
 
-# Configure Gemini API client
-client = genai.Client(api_key=os.environ.get("GEMINI_API_KEY"))
-
 # Response schemas
 class ExpandNodeResponse(BaseModel):
-    newNodes: list
-    newEdges: list
+    requestId: str
+    status: str
 
 class ErrorResponse(BaseModel):
     error: str
@@ -29,7 +22,7 @@ config = {
     "path": "/api/nodes/:nodeId/expand",
     "method": "POST",
     "description": "Expand a knowledge graph node by fetching additional related content from external sources. Discovers deeper subtopics, related concepts, tools, research, people, events, and applications using web search and LLM extraction.",
-    "emits": [],
+    "emits": ["expand-node"],
     "flows": ["knowledge-graph-flow"],
     "middleware": [create_timing_middleware("ExpandNode")],
     "responseSchema": {
@@ -52,7 +45,46 @@ async def handler(req, context):
         
         context.logger.info("Expanding node", {"node_id": node_id})
         
-        # Load graph data from Motia state FIRST (before checking for node)
+        # Generate unique request ID
+        request_id = str(uuid.uuid4())
+        
+        # Store initial request data
+        data_group_id, data_key = StateKeys.request_data(request_id)
+        await context.state.set(data_group_id, data_key, {
+            "node_id": node_id
+        })
+        
+        # Store initial status
+        status_group, status_key = StateKeys.status(request_id)
+        await context.state.set(status_group, status_key, {
+            "status": "processing",
+            "stage": "expanding_node"
+        })
+        
+        # Emit expand-node event
+        await context.emit({
+            "topic": "expand-node",
+            "data": {
+                "request_id": request_id,
+                "node_id": node_id
+            }
+        })
+        
+        context.logger.info("Emitted expand-node event", {"request_id": request_id, "node_id": node_id})
+        
+        return {
+            "status": 200,
+            "body": {
+                "requestId": request_id,
+                "status": "processing"
+            }
+        }
+    except Exception as e:
+        context.logger.error("Error expanding node", {"error": str(e)})
+        return {
+            "status": 500,
+            "body": {"error": f"Internal server error: {str(e)}"}
+        }
         node_data = await context.state.get("knowledge_graph", "node_data")
         graph_nodes = await context.state.get("knowledge_graph", "graph_nodes")
         

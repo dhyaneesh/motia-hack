@@ -68,15 +68,43 @@ export function NodeDetailSidebar() {
   const handleExpand = async () => {
     setIsExpanding(true);
     try {
-      const { newNodes, newEdges } = await api.expandNode(selectedNode.id);
-      addToGraph(newNodes, newEdges);
+      // Initiate expansion
+      const { requestId } = await api.expandNode(selectedNode.id);
+      
       toast({
-        title: 'Success',
-        description: `Added ${newNodes.length} new nodes`,
-        status: 'success',
-        duration: 3000,
+        title: 'Expanding node...',
+        description: 'Searching for related knowledge',
+        status: 'info',
+        duration: 2000,
         isClosable: true
       });
+      
+      // Poll for completion
+      const { newNodes, newEdges } = await api.pollExpandStatus(requestId, (status) => {
+        // Optional: Update UI with progress
+        if (status.status === 'processing') {
+          // Could show progress message
+        }
+      });
+      
+      if (newNodes && newEdges) {
+        addToGraph(newNodes, newEdges);
+        toast({
+          title: 'Success',
+          description: `Added ${newNodes.length} new nodes`,
+          status: 'success',
+          duration: 3000,
+          isClosable: true
+        });
+      } else {
+        toast({
+          title: 'Warning',
+          description: 'No new nodes found',
+          status: 'warning',
+          duration: 3000,
+          isClosable: true
+        });
+      }
     } catch (error: any) {
       toast({
         title: 'Error',

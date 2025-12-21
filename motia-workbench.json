@@ -13,23 +13,6 @@
     }
   },
   {
-    "id": "knowledge-graph-flow",
-    "config": {
-      "src\\api\\get_node_step.py": {
-        "x": 95,
-        "y": 53
-      },
-      "src\\api\\expand_node_step.py": {
-        "x": -357,
-        "y": 59
-      },
-      "src\\api\\chat_step.py": {
-        "x": 526,
-        "y": 64
-      }
-    }
-  },
-  {
     "id": "study-flow",
     "config": {
       "src\\api\\study_step.py": {
@@ -42,6 +25,59 @@
     "id": "shopping-flow",
     "config": {
       "src\\api\\shopping_step.py": {
+        "x": 0,
+        "y": 0
+      }
+    }
+  },
+  {
+    "id": "knowledge-graph-flow",
+    "config": {
+      "src\\api\\get_node_step.py": {
+        "x": 95,
+        "y": 53
+      },
+      "src\\api\\expand_node_step.py": {
+        "x": -338,
+        "y": 60
+      },
+      "src\\api\\chat_step.py": {
+        "x": 526,
+        "y": 64
+      },
+      "src\\events\\graph_ready_step.py": {
+        "x": 0,
+        "y": 0
+      },
+      "src\\events\\connect_cross_query_step.py": {
+        "x": 0,
+        "y": 0
+      },
+      "src\\events\\build_graph_step.py": {
+        "x": 0,
+        "y": 0
+      },
+      "src\\events\\extract_concepts_step.py": {
+        "x": 0,
+        "y": 0
+      },
+      "src\\events\\generate_embeddings_step.py": {
+        "x": 0,
+        "y": 0
+      },
+      "src\\events\\search_references_step.py": {
+        "x": 0,
+        "y": 0
+      },
+      "src\\events\\cluster_concepts_step.py": {
+        "x": 0,
+        "y": 0
+      },
+      "src\\events\\expand_node_step.py": {
+        "x": 0,
+        "y": 0
+      },
+      "src\\api\\chat_status_step.py": {
         "x": 0,
         "y": 0
       }

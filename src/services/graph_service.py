@@ -648,6 +648,108 @@ class GraphService:
             positions = {}
         
         return self._to_react_flow_format(positions, node_type="conceptCard")
+    
+    def deduplicate_nodes(self, embeddings_dict: Dict[str, List[float]], similarity_threshold: float = 0.85) -> Dict[str, str]:
+        """
+        Identify and merge highly similar nodes based on embedding similarity.
+        
+        Args:
+            embeddings_dict: Dictionary mapping node_id -> embedding vector
+            similarity_threshold: Cosine similarity threshold for merging (default: 0.85)
+            
+        Returns:
+            Dictionary mapping old_node_id -> canonical_node_id for merged nodes
+        """
+        if not embeddings_dict or len(embeddings_dict) < 2:
+            return {}
+        
+        # Get node IDs and embeddings in consistent order
+        node_ids = list(embeddings_dict.keys())
+        embeddings = [embeddings_dict[nid] for nid in node_ids]
+        
+        # Calculate similarity matrix
+        embedding_matrix = np.array(embeddings)
+        similarity_matrix = cosine_similarity(embedding_matrix)
+        
+        # Find pairs of nodes that are too similar
+        merge_map = {}  # Maps old_id -> canonical_id
+        merged_ids = set()  # Track which IDs have been merged away
+        
+        for i in range(len(node_ids)):
+            node_i = node_ids[i]
+            
+            # Skip if this node was already merged into another
+            if node_i in merged_ids:
+                continue
+            
+            for j in range(i + 1, len(node_ids)):
+                node_j = node_ids[j]
+                
+                # Skip if already merged
+                if node_j in merged_ids:
+                    continue
+                
+                # Check similarity
+                similarity = similarity_matrix[i][j]
+                
+                if similarity >= similarity_threshold:
+                    # Merge node_j into node_i (keep node_i as canonical)
+                    merge_map[node_j] = node_i
+                    merged_ids.add(node_j)
+                    
+                    # Merge node data - combine references and keep longer description
+                    if node_i in self.node_data and node_j in self.node_data:
+                        node_i_data = self.node_data[node_i]
+                        node_j_data = self.node_data[node_j]
+                        
+                        # Combine references (deduplicate by URL)
+                        refs_i = node_i_data.get("references", [])
+                        refs_j = node_j_data.get("references", [])
+                        
+                        seen_urls = {ref.get("url") for ref in refs_i if ref.get("url")}
+                        for ref in refs_j:
+                            if ref.get("url") and ref["url"] not in seen_urls:
+                                refs_i.append(ref)
+                                seen_urls.add(ref["url"])
+                        
+                        node_i_data["references"] = refs_i
+                        
+                        # Keep longer description
+                        desc_i = node_i_data.get("description", "")
+                        desc_j = node_j_data.get("description", "")
+                        if len(desc_j) > len(desc_i):
+                            node_i_data["description"] = desc_j
+                        
+                        # Merge product-specific fields (for shopping mode)
+                        if "price" in node_j_data and ("price" not in node_i_data or node_j_data["price"] < node_i_data["price"]):
+                            node_i_data["price"] = node_j_data["price"]  # Keep lower price
+                        
+                        if "rating" in node_j_data and ("rating" not in node_i_data or node_j_data["rating"] > node_i_data["rating"]):
+                            node_i_data["rating"] = node_j_data["rating"]  # Keep higher rating
+                        
+                        if "specs" in node_j_data:
+                            if "specs" not in node_i_data:
+                                node_i_data["specs"] = {}
+                            # Merge specs
+                            node_i_data["specs"].update(node_j_data["specs"])
+                    
+                    # Redirect all edges from node_j to node_i
+                    if self.graph.has_node(node_j):
+                        # Get neighbors of node_j
+                        neighbors = list(self.graph.neighbors(node_j))
+                        for neighbor in neighbors:
+                            if neighbor != node_i:  # Don't create self-loop
+                                # Get edge data
+                                edge_data = self.graph.get_edge_data(node_j, neighbor)
+                                # Add edge from node_i to neighbor (if doesn't exist)
+                                if not self.graph.has_edge(node_i, neighbor):
+                                    self.graph.add_edge(node_i, neighbor, **edge_data)
+                        
+                        # Remove node_j
+                        self.graph.remove_node(node_j)
+                        del self.node_data[node_j]
+        
+        return merge_map
 
 
 # Global instance
