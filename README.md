@@ -69,26 +69,84 @@ Dive transforms traditional search results into an interactive knowledge graph w
 ## Architecture
 
 ```mermaid
-flowchart TD
-    User[User Query] --> API[Chat API<br/>/api/chat]
-    API --> LLM[Gemini LLM<br/>Extract Concepts]
-    LLM --> Extract[Extract Concepts Event]
-    Extract --> Search[Search References<br/>Tavily API]
-    Search --> Embed[Generate Embeddings<br/>Gemini Embeddings]
-    Embed --> Cluster[Cluster Concepts<br/>HDBSCAN]
-    Cluster --> Graph[Build Knowledge Graph<br/>NetworkX]
-    Graph --> State[Store in State]
-    State --> Frontend[React Flow Visualization]
-    Frontend --> NodeClick[User Clicks Node]
-    NodeClick --> GetNode[Get Node API<br/>/api/nodes/:id]
-    GetNode --> Sidebar[Node Detail Sidebar<br/>Shows Sources & Details]
-    
-    style User fill:#e1f5ff
-    style Frontend fill:#c8e6c9
-    style Sidebar fill:#fff9c4
-    style Search fill:#ffccbc
-    style Cluster fill:#f3e5f5
-    style Graph fill:#e1bee7
+flowchart TB
+    subgraph Frontend["🖥️ Frontend Layer"]
+        UI[ChatInterface<br/>ModeSwitcher]
+        Graph[KnowledgeGraph<br/>React Flow]
+        Sidebar[NodeDetailSidebar]
+    end
+
+    subgraph API["📡 API Endpoints"]
+        ChatAPI["/api/chat<br/>/api/study<br/>/api/shopping"]
+        StatusAPI["/api/chat/status<br/>/api/nodes/:id"]
+        ExpandAPI["/api/nodes/:id/expand"]
+    end
+
+    subgraph Events["⚡ Event Pipeline"]
+        Extract[Extract Concepts]
+        Search[Search References]
+        Embed[Generate Embeddings]
+        Cluster[Cluster Concepts]
+        Build[Build Graph]
+    end
+
+    subgraph Services["🔧 Core Services"]
+        LLM[LLM Service<br/>Gemini]
+        EmbedSvc[Embedding Service<br/>Gemini]
+        ClusterSvc[Clustering Service<br/>HDBSCAN]
+        GraphSvc[Graph Service<br/>NetworkX]
+        SearchSvc[Search Services<br/>Tavily/SerpAPI]
+    end
+
+    subgraph State["💾 State Management"]
+        Redis[(Redis<br/>State Storage)]
+    end
+
+    subgraph External["🌐 External APIs"]
+        Gemini{{Gemini API}}
+        Tavily{{Tavily API}}
+        SerpAPI{{SerpAPI}}
+    end
+
+    UI --> ChatAPI
+    Graph --> StatusAPI
+    Graph --> ExpandAPI
+    Sidebar --> StatusAPI
+
+    ChatAPI --> Extract
+    Extract --> Search
+    Search --> Embed
+    Embed --> Cluster
+    Cluster --> Build
+    Build --> Redis
+
+    Extract -.-> LLM
+    Search -.-> SearchSvc
+    Embed -.-> EmbedSvc
+    Cluster -.-> ClusterSvc
+    Build -.-> GraphSvc
+
+    LLM --> Gemini
+    EmbedSvc --> Gemini
+    SearchSvc --> Tavily
+    SearchSvc --> SerpAPI
+
+    Redis --> StatusAPI
+    StatusAPI --> Graph
+
+    classDef frontend fill:#c8e6c9,stroke:#4caf50,stroke-width:3px
+    classDef api fill:#e1f5ff,stroke:#2196f3,stroke-width:3px
+    classDef event fill:#fff9c4,stroke:#ffc107,stroke-width:3px
+    classDef service fill:#f3e5f5,stroke:#9c27b0,stroke-width:3px
+    classDef state fill:#e1bee7,stroke:#e91e63,stroke-width:3px
+    classDef external fill:#ffccbc,stroke:#ff5722,stroke-width:3px
+
+    class UI,Graph,Sidebar frontend
+    class ChatAPI,StatusAPI,ExpandAPI api
+    class Extract,Search,Embed,Cluster,Build event
+    class LLM,EmbedSvc,ClusterSvc,GraphSvc,SearchSvc service
+    class Redis state
+    class Gemini,Tavily,SerpAPI external
 ```
 
 ### Event Flow
