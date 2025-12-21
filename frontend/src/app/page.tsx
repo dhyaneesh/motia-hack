@@ -3,6 +3,7 @@ import { Box, Flex } from '@chakra-ui/react';
 import dynamic from 'next/dynamic';
 import { ChatInterface } from '@/components/ChatInterface';
 import { NodeDetailSidebar } from '@/components/NodeDetailSidebar';
+import { BuildLearningPathButton } from '@/components/BuildLearningPathButton';
 import { useGraph } from '@/contexts/GraphContext';
 
 // Dynamic import to avoid SSR issues with React Flow
@@ -23,6 +24,7 @@ export default function Home() {
       {/* Graph Panel - Flexible width */}
       <Box flex={1} position="relative">
         <KnowledgeGraph />
+        <BuildLearningPathButton />
       </Box>
       
       {/* Sidebar - Unified for all modes */}

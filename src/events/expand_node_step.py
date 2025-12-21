@@ -33,7 +33,6 @@ config = {
     "infrastructure": {
         "handler": {
             "retries": 2,
-            "timeout": 60,
             "backoffRate": 2
         }
     }

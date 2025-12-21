@@ -2,7 +2,7 @@ import axios from 'axios';
 import { GraphData, SelectedNodeDetails } from '@/types';
 
 const client = axios.create({
-  baseURL: process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+  baseURL: process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000'
 });
 
 export interface ChatStatusResponse {
@@ -24,8 +24,12 @@ export const api = {
     return response.data.body || response.data;
   },
   
-  async shopping(query: string, numResults: number = 10): Promise<{ requestId: string; status: string }> {
-    const response = await client.post('/api/shopping', { query, num_results: numResults });
+  async shopping(query: string, numResults: number = 10, image?: string): Promise<{ requestId: string; status: string }> {
+    const response = await client.post('/api/shopping', { 
+      query, 
+      num_results: numResults,
+      image: image  // base64 encoded image
+    });
     return response.data.body || response.data;
   },
   
@@ -43,6 +47,19 @@ export const api = {
   async getStudyStatus(requestId: string): Promise<ChatStatusResponse> {
     // Reuse chat status endpoint pattern (or create study-specific one)
     const response = await client.get(`/api/chat/status/${requestId}`);
+    return response.data.body || response.data;
+  },
+  
+  async buildLearningPath(requestId: string): Promise<{ requestId: string; status: string; message: string }> {
+    const response = await client.post('/api/study/build-learning-path', { request_id: requestId });
+    return response.data.body || response.data;
+  },
+  
+  async generateQuiz(requestId: string, numQuestions: number = 5): Promise<{ requestId: string; questions: any[]; status: string }> {
+    const response = await client.post('/api/study/generate-quiz', { 
+      request_id: requestId,
+      num_questions: numQuestions
+    });
     return response.data.body || response.data;
   },
   
@@ -119,7 +136,7 @@ export const api = {
   /**
    * Poll for chat status until completed or failed
    */
-  async pollChatStatus(requestId: string, onUpdate?: (status: ChatStatusResponse) => void, maxAttempts: number = 30, intervalMs: number = 2000): Promise<ChatStatusResponse> {
+  async pollChatStatus(requestId: string, onUpdate?: (status: ChatStatusResponse) => void, maxAttempts: number = 150, intervalMs: number = 2000): Promise<ChatStatusResponse> {
     let attempts = 0;
     
     while (attempts < maxAttempts) {
@@ -135,6 +152,12 @@ export const api = {
       
       attempts++;
       await new Promise(resolve => setTimeout(resolve, intervalMs));
+    }
+    
+    // Final check: even if we timed out, check one more time in case it just completed
+    const finalStatus = await this.getChatStatus(requestId);
+    if (finalStatus.status === 'completed' || finalStatus.status === 'failed') {
+      return finalStatus;
     }
     
     throw new Error('Polling timeout: request did not complete within expected time');

@@ -217,8 +217,16 @@ export function NodeDetailSidebar() {
           {node.level && (
             <Box mb={4}>
               <Heading size="sm" mb={2}>Level</Heading>
-              <Badge colorScheme={node.level === 1 ? 'green' : node.level === 2 ? 'yellow' : 'red'}>
-                {node.level === 1 ? 'Beginner' : node.level === 2 ? 'Intermediate' : 'Advanced'}
+              <Badge colorScheme={
+                node.level === 1 ? 'green' : 
+                node.level === 2 ? 'yellow' : 
+                node.level === 3 ? 'red' : 
+                'gray'
+              }>
+                {node.level === 1 ? 'Beginner' : 
+                 node.level === 2 ? 'Intermediate' : 
+                 node.level === 3 ? 'Advanced' : 
+                 'Concept'}
               </Badge>
             </Box>
           )}

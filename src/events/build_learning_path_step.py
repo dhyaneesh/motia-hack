@@ -17,7 +17,7 @@ config = {
     "type": "event",
     "description": "Build optimal learning path sequence for concepts",
     "subscribes": ["build-learning-path"],
-    "emits": ["search-references"],  # Then goes to search references, embeddings, clustering, graph building
+    "emits": ["search-references", "graph-ready"],  # Then goes to search references, embeddings, clustering, graph building
     "flows": ["study-flow"],
     "input": BuildLearningPathInput.model_json_schema()
 }
@@ -73,9 +73,51 @@ async def handler(input_data, context):
             "path_length": len(learning_path)
         })
         
-        # Emit next event: search references (then embeddings, clustering, graph)
+        # After building learning path, rebuild the graph with updated concepts (levels and positions)
+        # Fetch clusters and embeddings to rebuild graph
+        cluster_group_id, cluster_key = StateKeys.clusters(data.request_id)
+        clusters = await context.state.get(cluster_group_id, cluster_key)
+        if isinstance(clusters, dict) and "data" in clusters:
+            clusters = clusters.get("data", [])
+        
+        emb_group_id, emb_key = StateKeys.embeddings(data.request_id)
+        embeddings = await context.state.get(emb_group_id, emb_key)
+        if isinstance(embeddings, dict) and "data" in embeddings:
+            embeddings = embeddings.get("data", [])
+        
+        # Rebuild graph with updated concepts (now with levels and positions)
+        from src.services.graph_service import graph_service
+        graph = graph_service.build_study_graph(
+            clusters,
+            concepts,
+            embeddings=embeddings,
+            k=2
+        )
+        
+        # Store updated graph
+        graph_group_id, graph_key = StateKeys.graph(data.request_id)
+        await context.state.set(graph_group_id, graph_key, graph)
+        
+        # Update status to completed with updated graph
+        status_group, status_key = StateKeys.status(data.request_id)
+        await context.state.set(status_group, status_key, {
+            "status": "completed",
+            "learning_path_built": True,
+            "path_length": len(learning_path),
+            "node_count": len(graph["nodes"]),
+            "edge_count": len(graph["edges"])
+        })
+        
+        context.logger.info("Rebuilt graph with learning path data", {
+            "request_id": data.request_id,
+            "nodes": len(graph["nodes"]),
+            "edges": len(graph["edges"]),
+            "path_length": len(learning_path)
+        })
+        
+        # Emit graph-ready to signal completion
         await context.emit({
-            "topic": "search-references",
+            "topic": "graph-ready",
             "data": {
                 "request_id": data.request_id,
                 "mode": "study"

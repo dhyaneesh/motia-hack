@@ -15,7 +15,7 @@ config = {
     "flows": []
 }
 
-async def handler(input_data, context):
+async def handler(context):
     """Clean up old request state data."""
     try:
         context.logger.info("Starting state cleanup", {})

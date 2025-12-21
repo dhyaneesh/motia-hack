@@ -16,7 +16,7 @@ type MasteryLevel = 'not_started' | 'learning' | 'mastered';
 interface ConceptProgress {
   id: string;
   name: string;
-  level: number;
+  level: number | string; // 1, 2, 3, or "Concept"
   mastery: MasteryLevel;
   timeSpent: number; // in minutes
 }
@@ -28,7 +28,7 @@ export function ProgressDashboard() {
   const concepts: ConceptProgress[] = graph?.nodes?.map(node => ({
     id: node.id,
     name: node.data?.name || 'Unknown',
-    level: node.data?.level || 2,
+    level: (node.data?.level ?? 'Concept') as number | string,
     mastery: 'learning' as MasteryLevel, // Would be tracked in state/database
     timeSpent: 0 // Would be tracked in state/database
   })) || [];

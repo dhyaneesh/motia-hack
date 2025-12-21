@@ -17,7 +17,7 @@ import {
   Select,
   Checkbox
 } from '@chakra-ui/react';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useGraph } from '@/contexts/GraphContext';
 import { useMode } from '@/contexts/ModeContext';
 
@@ -43,26 +43,29 @@ export function ExpandableFilters() {
     sortBy: 'relevance'
   });
   
+  // Calculate price range from products (safe even if graph is null)
+  const priceRange = useMemo(() => {
+    if (!graph?.nodes) return { min: 0, max: 1000 };
+    return graph.nodes.reduce((acc, node) => {
+      const price = node.data?.price;
+      if (price) {
+        acc.min = Math.min(acc.min, price);
+        acc.max = Math.max(acc.max, price);
+      }
+      return acc;
+    }, { min: 0, max: 1000 });
+  }, [graph?.nodes]);
+  
+  useEffect(() => {
+    if (graph && priceRange.max > filters.maxPrice) {
+      setFilters(prev => ({ ...prev, maxPrice: priceRange.max }));
+    }
+  }, [priceRange.max, graph]);
+  
   // Only show in shopping mode when graph has nodes
   if (currentMode !== 'shopping' || !graph || graph.nodes.length === 0) {
     return null;
   }
-  
-  // Calculate price range from products
-  const priceRange = graph.nodes.reduce((acc, node) => {
-    const price = node.data?.price;
-    if (price) {
-      acc.min = Math.min(acc.min, price);
-      acc.max = Math.max(acc.max, price);
-    }
-    return acc;
-  }, { min: 0, max: 1000 });
-  
-  useEffect(() => {
-    if (priceRange.max > filters.maxPrice) {
-      setFilters(prev => ({ ...prev, maxPrice: priceRange.max }));
-    }
-  }, [priceRange.max]);
   
   const handleFilterChange = (key: keyof FilterState, value: any) => {
     setFilters(prev => ({ ...prev, [key]: value }));

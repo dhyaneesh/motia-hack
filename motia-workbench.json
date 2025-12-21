@@ -13,59 +13,6 @@
     }
   },
   {
-    "id": "knowledge-graph-flow",
-    "config": {
-      "src\\events\\search_references_step.py": {
-        "x": 718,
-        "y": 466
-      },
-      "src\\events\\graph_ready_step.py": {
-        "x": 2450,
-        "y": 308
-      },
-      "src\\events\\generate_embeddings_step.py": {
-        "x": 1189,
-        "y": 523
-      },
-      "src\\events\\extract_concepts_step.py": {
-        "x": 284,
-        "y": 432
-      },
-      "src\\events\\expand_node_step.py": {
-        "x": 2100,
-        "y": 116
-      },
-      "src\\events\\connect_cross_query_step.py": {
-        "x": 2100,
-        "y": 308
-      },
-      "src\\events\\cluster_concepts_step.py": {
-        "x": 1731,
-        "y": 631
-      },
-      "src\\events\\build_graph_step.py": {
-        "x": 2143,
-        "y": 715
-      },
-      "src\\api\\get_node_step.py": {
-        "x": 95,
-        "y": 53
-      },
-      "src\\api\\expand_node_step.py": {
-        "x": -338,
-        "y": 60
-      },
-      "src\\api\\chat_step.py": {
-        "x": 526,
-        "y": 64
-      },
-      "src\\api\\chat_status_step.py": {
-        "x": 0,
-        "y": 566
-      }
-    }
-  },
-  {
     "id": "study-flow",
     "config": {
       "src\\events\\search_references_step.py": {
@@ -111,12 +58,61 @@
     }
   },
   {
+    "id": "knowledge-graph-flow",
+    "config": {
+      "src\\events\\search_references_step.py": {
+        "x": 718,
+        "y": 466
+      },
+      "src\\events\\graph_ready_step.py": {
+        "x": 2450,
+        "y": 308
+      },
+      "src\\events\\generate_embeddings_step.py": {
+        "x": 1189,
+        "y": 523
+      },
+      "src\\events\\extract_concepts_step.py": {
+        "x": 284,
+        "y": 432
+      },
+      "src\\events\\expand_node_step.py": {
+        "x": 2100,
+        "y": 116
+      },
+      "src\\events\\connect_cross_query_step.py": {
+        "x": 2100,
+        "y": 308
+      },
+      "src\\events\\cluster_concepts_step.py": {
+        "x": 1731,
+        "y": 631
+      },
+      "src\\api\\get_node_step.py": {
+        "x": 95,
+        "y": 53
+      },
+      "src\\api\\expand_node_step.py": {
+        "x": -338,
+        "y": 60
+      },
+      "src\\api\\chat_step.py": {
+        "x": 526,
+        "y": 64
+      },
+      "src\\api\\chat_status_step.py": {
+        "x": 0,
+        "y": 566
+      },
+      "src\\events\\build_graph_step.py": {
+        "x": 1750,
+        "y": 347
+      }
+    }
+  },
+  {
     "id": "shopping-flow",
     "config": {
-      "src\\events\\search_products_step.py": {
-        "x": 350,
-        "y": 54
-      },
       "src\\events\\graph_ready_step.py": {
         "x": 2029,
         "y": 44
@@ -133,11 +129,23 @@
         "x": 1329,
         "y": 44
       },
+      "src\\api\\shopping_step.py": {
+        "x": 0,
+        "y": 0
+      },
       "src\\events\\build_graph_step.py": {
         "x": 1679,
         "y": 44
       },
-      "src\\api\\shopping_step.py": {
+      "src\\events\\search_products_step.py": {
+        "x": 350,
+        "y": 54
+      },
+      "src\\events\\parse_shopping_query_step.py": {
+        "x": 0,
+        "y": 243
+      },
+      "src\\api\\get_node_step.py": {
         "x": 0,
         "y": 0
       }

@@ -7,10 +7,12 @@ interface GraphContextType {
   graph: GraphData | null;
   selectedNode: SelectedNodeDetails | null;
   isSidebarOpen: boolean;
+  currentRequestId: string | null;
   setGraph: (graph: GraphData) => void;
   selectNode: (node: SelectedNodeDetails | null) => void;
   addToGraph: (newNodes: GraphNode[], newEdges: GraphEdge[]) => void;
   clearGraph: () => void;
+  setRequestId: (requestId: string | null) => void;
   // Mode-specific state preservation
   savedGraphs: Record<Mode, GraphData | null>;
   saveGraphForMode: (mode: Mode) => void;
@@ -22,6 +24,7 @@ const GraphContext = createContext<GraphContextType | undefined>(undefined);
 export function GraphProvider({ children }: { children: ReactNode }) {
   const [graph, setGraph] = useState<GraphData | null>(null);
   const [selectedNode, setSelectedNode] = useState<SelectedNodeDetails | null>(null);
+  const [currentRequestId, setCurrentRequestId] = useState<string | null>(null);
   const [savedGraphs, setSavedGraphs] = useState<Record<Mode, GraphData | null>>({
     default: null,
     shopping: null,
@@ -45,6 +48,11 @@ export function GraphProvider({ children }: { children: ReactNode }) {
   const clearGraph = () => {
     setGraph(null);
     setSelectedNode(null);
+    setCurrentRequestId(null);
+  };
+  
+  const setRequestId = (requestId: string | null) => {
+    setCurrentRequestId(requestId);
   };
   
   const saveGraphForMode = useCallback((mode: Mode) => {
@@ -68,10 +76,12 @@ export function GraphProvider({ children }: { children: ReactNode }) {
       graph,
       selectedNode,
       isSidebarOpen: selectedNode !== null,
+      currentRequestId,
       setGraph,
       selectNode,
       addToGraph,
       clearGraph,
+      setRequestId,
       savedGraphs,
       saveGraphForMode,
       restoreGraphForMode

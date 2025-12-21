@@ -23,7 +23,6 @@ config = {
     "infrastructure": {
         "handler": {
             "retries": 2,
-            "timeout": 60,
             "backoffRate": 2
         }
     }
@@ -55,13 +54,20 @@ async def handler(input_data, context):
         for concept in concepts:
             try:
                 level = await assign_concept_level(concept)
-                concept["level"] = level
+                if level is not None:
+                    concept["level"] = level
+                else:
+                    # Use "Concept" as placeholder when level assignment fails
+                    concept["level"] = "Concept"
+                    context.logger.info(f"Level assignment failed for {concept.get('name')}, using 'Concept' placeholder", {
+                        "concept_id": concept.get("id")
+                    })
             except Exception as e:
-                context.logger.info(f"Failed to assign level for {concept.get('name')}", {
+                context.logger.warn(f"Failed to assign level for {concept.get('name')}, using 'Concept' placeholder", {
                     "error": str(e),
                     "concept_id": concept.get("id")
                 })
-                concept["level"] = 2  # Default to intermediate
+                concept["level"] = "Concept"  # Use "Concept" as placeholder if assignment fails
         
         # Store updated concepts
         await context.state.set(group_id, key, concepts)
@@ -70,7 +76,8 @@ async def handler(input_data, context):
             "request_id": data.request_id,
             "beginner": sum(1 for c in concepts if c.get("level") == 1),
             "intermediate": sum(1 for c in concepts if c.get("level") == 2),
-            "advanced": sum(1 for c in concepts if c.get("level") == 3)
+            "advanced": sum(1 for c in concepts if c.get("level") == 3),
+            "concept_placeholder": sum(1 for c in concepts if c.get("level") == "Concept")
         })
         
         # Update status

@@ -1,5 +1,6 @@
 """Event step for searching products using SerpAPI."""
 from pydantic import BaseModel
+from typing import Optional, Dict
 from src.services import serpapi_service
 from src.utils.state_keys import StateKeys
 import sys
@@ -13,6 +14,8 @@ class SearchProductsInput(BaseModel):
     request_id: str
     query: str
     num_results: int = 10
+    parsed_attributes: Optional[Dict] = None
+    filters: Optional[Dict] = None
 
 config = {
     "name": "SearchProducts",
@@ -25,7 +28,6 @@ config = {
     "infrastructure": {
         "handler": {
             "retries": 3,
-            "timeout": 30,
             "backoffRate": 2
         }
     }
@@ -40,11 +42,50 @@ async def handler(input_data, context):
         context.logger.info("Searching products", {
             "request_id": data.request_id,
             "query": data.query,
-            "num_results": data.num_results
+            "num_results": data.num_results,
+            "parsed_attributes": data.parsed_attributes,
+            "filters": data.filters
         })
         
-        # Search products via SerpAPI
-        products = await serpapi_service.search_products(data.query, data.num_results)
+        # Prepare filters for SerpAPI
+        serpapi_filters = {}
+        if data.filters:
+            # Extract price filters
+            if data.filters.get("price_min") is not None:
+                serpapi_filters["price_min"] = float(data.filters["price_min"])
+            if data.filters.get("price_max") is not None:
+                serpapi_filters["price_max"] = float(data.filters["price_max"])
+            # Extract rating filter
+            if data.filters.get("rating_min") is not None:
+                serpapi_filters["rating_min"] = float(data.filters["rating_min"])
+            # Extract brand if available
+            if data.parsed_attributes and data.parsed_attributes.get("brand"):
+                serpapi_filters["brand"] = data.parsed_attributes["brand"]
+        
+        # Search products via SerpAPI (using optimized query from LLM parsing)
+        products = await serpapi_service.search_products(
+            data.query, 
+            data.num_results,
+            filters=serpapi_filters if serpapi_filters else None
+        )
+        
+        # Apply filters if provided (price range, rating, etc.)
+        if data.filters:
+            filtered_products = []
+            for product in products:
+                # Apply price filters
+                if data.filters.get("price_min") is not None:
+                    if product.get("price") is None or product.get("price") < data.filters["price_min"]:
+                        continue
+                if data.filters.get("price_max") is not None:
+                    if product.get("price") is None or product.get("price") > data.filters["price_max"]:
+                        continue
+                # Apply rating filter
+                if data.filters.get("rating_min") is not None:
+                    if product.get("rating") is None or product.get("rating") < data.filters["rating_min"]:
+                        continue
+                filtered_products.append(product)
+            products = filtered_products
         
         context.logger.info("Found products", {
             "request_id": data.request_id,

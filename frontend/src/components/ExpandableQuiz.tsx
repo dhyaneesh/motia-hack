@@ -16,7 +16,7 @@ import {
   Badge,
   useToast
 } from '@chakra-ui/react';
-import { useState, useEffect } from 'react';
+import { useState, useCallback } from 'react';
 import { useGraph } from '@/contexts/GraphContext';
 import { useMode } from '@/contexts/ModeContext';
 import { api } from '@/services/api';
@@ -31,7 +31,7 @@ interface QuizQuestion {
 }
 
 export function ExpandableQuiz() {
-  const { graph } = useGraph();
+  const { graph, currentRequestId } = useGraph();
   const { currentMode } = useMode();
   const [isOpen, setIsOpen] = useState(false);
   const [questions, setQuestions] = useState<QuizQuestion[]>([]);
@@ -39,58 +39,54 @@ export function ExpandableQuiz() {
   const [answers, setAnswers] = useState<Record<number, string>>({});
   const [showResults, setShowResults] = useState(false);
   const [score, setScore] = useState(0);
+  const [isGenerating, setIsGenerating] = useState(false);
   const toast = useToast();
   
-  // Only show in study mode when graph has nodes
-  if (currentMode !== 'study' || !graph || graph.nodes.length === 0) {
-    return null;
-  }
-  
-  useEffect(() => {
-    if (isOpen && questions.length === 0) {
-      generateQuiz();
+  const generateQuiz = useCallback(async () => {
+    if (!graph || graph.nodes.length === 0) return;
+    
+    // Check if learning path is built (concepts should have learningPathPosition)
+    const conceptsWithPath = graph.nodes.filter(node => node.data?.learningPathPosition !== undefined && node.data?.learningPathPosition !== null);
+    if (conceptsWithPath.length === 0) {
+      toast({
+        title: 'Learning Path Required',
+        description: 'Please build the learning path first before generating quiz',
+        status: 'warning',
+        duration: 4000,
+        isClosable: true
+      });
+      return;
     }
-  }, [isOpen]);
-  
-  const generateQuiz = async () => {
+    
+    if (!currentRequestId) {
+      toast({
+        title: 'Error',
+        description: 'Request ID not found. Please submit a new query.',
+        status: 'error',
+        duration: 5000
+      });
+      return;
+    }
+    
+    setIsGenerating(true);
     try {
-      // Extract concepts from graph
-      const concepts = graph.nodes.map(node => ({
-        id: node.id,
-        name: node.data?.name || 'Unknown',
-        description: node.data?.description || ''
-      }));
+      // Call API to generate quiz
+      const response = await api.generateQuiz(currentRequestId, 5);
       
-      if (concepts.length === 0) {
+      if (response.questions && response.questions.length > 0) {
+        setQuestions(response.questions);
+        setCurrentQuestion(0);
+        setAnswers({});
+        setShowResults(false);
+        setScore(0);
+      } else {
         toast({
-          title: 'No concepts available',
-          description: 'Complete a study query first to generate a quiz',
+          title: 'No Questions Generated',
+          description: 'Failed to generate quiz questions',
           status: 'warning',
           duration: 3000
         });
-        return;
       }
-      
-      // Generate mock questions (would call API in production)
-      const mockQuestions: QuizQuestion[] = concepts.slice(0, 5).map((concept, idx) => ({
-        type: 'multiple_choice',
-        question: `What is ${concept.name}?`,
-        options: [
-          concept.description.substring(0, 50) || 'Option 1',
-          'Option 2',
-          'Option 3',
-          'Option 4'
-        ],
-        correct_answer: concept.description.substring(0, 50) || 'Option 1',
-        explanation: `See ${concept.name} for details.`,
-        concept_id: concept.id
-      }));
-      
-      setQuestions(mockQuestions);
-      setCurrentQuestion(0);
-      setAnswers({});
-      setShowResults(false);
-      setScore(0);
     } catch (error: any) {
       toast({
         title: 'Error',
@@ -98,8 +94,18 @@ export function ExpandableQuiz() {
         status: 'error',
         duration: 5000
       });
+    } finally {
+      setIsGenerating(false);
     }
-  };
+  }, [graph, currentRequestId, toast]);
+  
+  // Don't auto-generate quiz - user must click button after learning path is built
+  // useEffect removed - quiz generation is now manual
+  
+  // Only show in study mode when graph has nodes
+  if (currentMode !== 'study' || !graph || graph.nodes.length === 0) {
+    return null;
+  }
   
   const handleAnswer = (answer: string) => {
     setAnswers(prev => ({ ...prev, [currentQuestion]: answer }));
@@ -140,9 +146,18 @@ export function ExpandableQuiz() {
             {questions.length === 0 ? (
               <VStack spacing={4}>
                 <Text fontSize="sm" color="gray.500">
-                  Generate quiz questions from your study concepts
+                  {graph.nodes.some(n => n.data?.learningPathPosition !== undefined && n.data?.learningPathPosition !== null) 
+                    ? 'Generate quiz questions from your study concepts'
+                    : 'Build learning path first to generate quiz questions'}
                 </Text>
-                <Button size="sm" colorScheme="blue" onClick={generateQuiz}>
+                <Button 
+                  size="sm" 
+                  colorScheme="blue" 
+                  onClick={generateQuiz}
+                  isDisabled={!graph.nodes.some(n => n.data?.learningPathPosition !== undefined && n.data?.learningPathPosition !== null) || isGenerating}
+                  isLoading={isGenerating}
+                  loadingText="Generating..."
+                >
                   Generate Quiz
                 </Button>
               </VStack>

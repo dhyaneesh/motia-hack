@@ -25,7 +25,6 @@ config = {
     "infrastructure": {
         "handler": {
             "retries": 3,
-            "timeout": 60,  # Longer timeout for parallel searches
             "backoffRate": 2
         }
     }

@@ -15,7 +15,8 @@ declare module 'motia' {
     'ProcessGreeting': EventHandler<{ timestamp: string; appName: string; greetingPrefix: string; requestId: string }, never>
     'HelloAPI': ApiRouteHandler<Record<string, unknown>, ApiResponse<200, { message: string; status: string; appName: string }>, { topic: 'process-greeting'; data: { timestamp: string; appName: string; greetingPrefix: string; requestId: string } }>
     'SearchReferences': EventHandler<{ request_id: string; mode?: string }, { topic: 'generate-embeddings'; data: { request_id: string; mode?: string } }>
-    'SearchProducts': EventHandler<{ request_id: string; query: string; num_results?: unknown }, { topic: 'extract-specs'; data: { request_id: string } }>
+    'SearchProducts': EventHandler<{ request_id: string; query: string; num_results?: unknown; parsed_attributes?: Record<string, unknown> | unknown; filters?: Record<string, unknown> | unknown }, { topic: 'extract-specs'; data: { request_id: string } }>
+    'ParseShoppingQuery': EventHandler<{ request_id: string; query: string; num_results?: unknown }, { topic: 'search-products'; data: { request_id: string; query: string; num_results?: unknown; parsed_attributes?: Record<string, unknown> | unknown; filters?: Record<string, unknown> | unknown } }>
     'GraphReady': EventHandler<{ request_id: string; mode?: string }, never>
     'GenerateEmbeddings': EventHandler<{ request_id: string; mode?: string }, { topic: 'cluster-concepts'; data: { request_id: string; mode?: string } }>
     'ExtractSpecs': EventHandler<{ request_id: string }, { topic: 'generate-embeddings'; data: { request_id: string; mode?: string } }>
@@ -23,16 +24,18 @@ declare module 'motia' {
     'ExpandNodeEvent': EventHandler<{ request_id: string; node_id: string }, { topic: 'graph-ready'; data: { request_id: string; mode?: string } }>
     'ConnectCrossQuery': EventHandler<{ request_id: string; mode?: string }, { topic: 'graph-ready'; data: { request_id: string; mode?: string } }>
     'ClusterConcepts': EventHandler<{ request_id: string; mode?: string }, { topic: 'build-graph'; data: { request_id: string; mode?: string; previous_query?: string | unknown } }>
-    'BuildLearningPath': EventHandler<{ request_id: string }, { topic: 'search-references'; data: { request_id: string; mode?: string } }>
+    'BuildLearningPath': EventHandler<{ request_id: string }, { topic: 'search-references'; data: { request_id: string; mode?: string } } | { topic: 'graph-ready'; data: { request_id: string; mode?: string } }>
     'BuildGraph': EventHandler<{ request_id: string; mode?: string; previous_query?: string | unknown }, { topic: 'connect-cross-query'; data: { request_id: string; mode?: string } } | { topic: 'graph-ready'; data: { request_id: string; mode?: string } }>
     'AssignLevels': EventHandler<{ request_id: string }, { topic: 'build-learning-path'; data: { request_id: string } }>
     'CleanupState': CronHandler<never>
     'StudyAPI': ApiRouteHandler<{ question: string }, ApiResponse<200, { requestId: string; answer: string; status: string }> | ApiResponse<400, { error: string }> | ApiResponse<500, { error: string }>, { topic: 'extract-concepts'; data: { request_id: string; question: string; answer: string; max_concepts?: unknown; mode?: string } }>
-    'ShoppingAPI': ApiRouteHandler<{ query: string; num_results?: unknown }, ApiResponse<200, { requestId: string; status: string }> | ApiResponse<400, { error: string }> | ApiResponse<500, { error: string }>, { topic: 'search-products'; data: { request_id: string; query: string; num_results?: unknown } }>
+    'ShoppingAPI': ApiRouteHandler<{ query?: string; num_results?: unknown }, ApiResponse<200, { requestId: string; status: string }> | ApiResponse<400, { error: string }> | ApiResponse<500, { error: string }>, { topic: 'parse-shopping-query'; data: { request_id: string; query: string; num_results?: unknown } }>
     'GetNodeDetails': ApiRouteHandler<Record<string, unknown>, ApiResponse<200, { id: string; name: string; description: string; type: string; clusterId: string; references: Array<Record<string, unknown>>; relatedNodes: Array<Record<string, unknown>> }> | ApiResponse<400, { error: string }> | ApiResponse<404, { error: string }> | ApiResponse<500, { error: string }>, never>
+    'GenerateQuizAPI': ApiRouteHandler<{ request_id: string; num_questions?: unknown }, ApiResponse<200, { requestId: string; questions: Array<Record<string, unknown>>; status: string }> | ApiResponse<400, { error: string }> | ApiResponse<500, { error: string }>, never>
     'ExpandNode': ApiRouteHandler<Record<string, unknown>, ApiResponse<200, { requestId: string; status: string }> | ApiResponse<400, { error: string }> | ApiResponse<404, { error: string }> | ApiResponse<500, { error: string }>, { topic: 'expand-node'; data: { request_id: string; node_id: string } }>
     'ChatAPI': ApiRouteHandler<{ question: string; context?: Record<string, unknown>; mode?: string; image?: string | unknown; previousQuery?: string | unknown }, ApiResponse<200, { requestId: string; answer: string; status: string }> | ApiResponse<400, { error: string }> | ApiResponse<500, { error: string }>, { topic: 'extract-concepts'; data: { request_id: string; question: string; answer: string; max_concepts?: unknown; mode?: string } }>
     'ChatStatus': ApiRouteHandler<Record<string, unknown>, ApiResponse<200, { status: string; graph?: Record<string, unknown>; clusters?: Array<unknown>; error?: string }> | ApiResponse<404, { error: string }> | ApiResponse<500, { error: string }>, never>
+    'BuildLearningPathAPI': ApiRouteHandler<{ request_id: string }, ApiResponse<200, { requestId: string; status: string; message: string }> | ApiResponse<400, { error: string }> | ApiResponse<500, { error: string }>, { topic: 'assign-levels'; data: { request_id: string } }>
   }
     
 }

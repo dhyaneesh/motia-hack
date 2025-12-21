@@ -176,8 +176,10 @@ class GraphService:
             
             # Add study-specific fields if present
             if "level" in data:
-                node_data["level"] = data.get("level")
+                node_data["level"] = data.get("level")  # Can be int 1-3 or "Concept" placeholder
+            if "prerequisites" in data:
                 node_data["prerequisites"] = data.get("prerequisites", [])
+            if "learning_path_position" in data and data.get("learning_path_position") is not None:
                 node_data["learningPathPosition"] = data.get("learning_path_position")
             
             nodes.append({
@@ -582,27 +584,38 @@ class GraphService:
                     continue
                 
                 # Store full node data with study-specific fields
-                self.node_data[concept_id] = {
+                node_data_dict = {
                     "name": concept.get("name", "Unknown"),
                     "description": concept.get("description", ""),
                     "type": concept.get("type", "concept"),
                     "cluster_id": cluster_id,
-                    "level": concept.get("level", 2),  # 1=Beginner, 2=Intermediate, 3=Advanced
-                    "prerequisites": concept.get("prerequisites", []),
-                    "learning_path_position": concept.get("learning_path_position"),
                     "references": concept.get("references", [])
                 }
                 
+                # Include level if it's assigned (can be int 1-3 or "Concept" placeholder)
+                if concept.get("level") is not None:
+                    node_data_dict["level"] = concept.get("level")
+                if concept.get("prerequisites"):
+                    node_data_dict["prerequisites"] = concept.get("prerequisites", [])
+                if concept.get("learning_path_position") is not None:
+                    node_data_dict["learning_path_position"] = concept.get("learning_path_position")
+                
+                self.node_data[concept_id] = node_data_dict
+                
                 # Add node to graph
-                self.graph.add_node(
-                    concept_id,
-                    name=concept.get("name", "Unknown"),
-                    description=concept.get("description", ""),
-                    type=concept.get("type", "concept"),
-                    cluster_id=cluster_id,
-                    level=concept.get("level", 2),
-                    prerequisites=concept.get("prerequisites", [])
-                )
+                graph_node_attrs = {
+                    "name": concept.get("name", "Unknown"),
+                    "description": concept.get("description", ""),
+                    "type": concept.get("type", "concept"),
+                    "cluster_id": cluster_id
+                }
+                # Add level to graph node if it exists (can be int 1-3 or "Concept" placeholder)
+                if concept.get("level") is not None:
+                    graph_node_attrs["level"] = concept.get("level")
+                if concept.get("prerequisites"):
+                    graph_node_attrs["prerequisites"] = concept.get("prerequisites", [])
+                
+                self.graph.add_node(concept_id, **graph_node_attrs)
         
         # Build edges using KNN if embeddings provided, otherwise use cluster-based edges
         if embeddings and len(embeddings) == len(concepts):

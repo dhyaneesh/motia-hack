@@ -44,6 +44,11 @@ class StateKeys:
         return (f"request_{request_id}", "products")
     
     @staticmethod
+    def parsed_shopping_query(request_id: str) -> tuple[str, str]:
+        """Get state key for parsed shopping query (shopping mode)."""
+        return (f"request_{request_id}", "parsed_query")
+    
+    @staticmethod
     def existing_graph(flow_type: str) -> tuple[str, str]:
         """Get state key for existing graph state (knowledge_graph, study_graph, shopping_graph)."""
         return (flow_type, "node_data")

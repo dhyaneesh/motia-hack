@@ -6,11 +6,10 @@ export type Mode = 'default' | 'shopping' | 'study';
 interface ModeContextType {
   currentMode: Mode;
   modeHistory: Mode[];
+  autoDetectEnabled: boolean;
   setMode: (mode: Mode) => void;
-  autoDetectMode: (query: string) => void;
-  preserveState: () => void;
-  restoreState: (mode: Mode) => void;
-  savedStates: Record<Mode, any>;
+  toggleAutoDetect: () => void;
+  autoDetectMode: (query: string) => Mode;
 }
 
 const ModeContext = createContext<ModeContextType | undefined>(undefined);
@@ -18,28 +17,25 @@ const ModeContext = createContext<ModeContextType | undefined>(undefined);
 export function ModeProvider({ children }: { children: ReactNode }) {
   const [currentMode, setCurrentMode] = useState<Mode>('default');
   const [modeHistory, setModeHistory] = useState<Mode[]>(['default']);
-  const [savedStates, setSavedStates] = useState<Record<Mode, any>>({
-    default: null,
-    shopping: null,
-    study: null
-  });
+  const [autoDetectEnabled, setAutoDetectEnabled] = useState<boolean>(false);
 
   const setMode = useCallback((mode: Mode) => {
-    // Preserve current state before switching
-    preserveState();
-    
     setCurrentMode(mode);
     setModeHistory(prev => [...prev, mode]);
   }, []);
 
-  const autoDetectMode = useCallback((query: string) => {
+  const toggleAutoDetect = useCallback(() => {
+    setAutoDetectEnabled(prev => !prev);
+  }, []);
+
+  const autoDetectMode = useCallback((query: string): Mode => {
     const queryLower = query.toLowerCase();
     
     // Shopping keywords
     const shoppingKeywords = [
       'buy', 'purchase', 'shop', 'shopping', 'price', 'prices', 'cost', 'costs',
       'cheap', 'affordable', 'discount', 'sale', 'deal', 'best price', 'compare prices',
-      'where to buy', 'buy online', 'retailer', 'store'
+      'where to buy', 'buy online', 'retailer', 'store', 'amazon', 'ebay', 'walmart'
     ];
     
     // Study keywords
@@ -52,32 +48,19 @@ export function ModeProvider({ children }: { children: ReactNode }) {
     // Check for shopping intent
     for (const keyword of shoppingKeywords) {
       if (queryLower.includes(keyword)) {
-        setMode('shopping');
-        return;
+        return 'shopping';
       }
     }
     
     // Check for study intent
     for (const keyword of studyKeywords) {
       if (queryLower.includes(keyword)) {
-        setMode('study');
-        return;
+        return 'study';
       }
     }
     
     // Default fallback
-    setMode('default');
-  }, []);
-
-  const preserveState = useCallback(() => {
-    // This will be called from GraphContext to save graph state
-    // The actual state preservation is handled in GraphContext
-  }, []);
-
-  const restoreState = useCallback((mode: Mode) => {
-    // This will be called from GraphContext to restore graph state
-    // The actual state restoration is handled in GraphContext
-    setCurrentMode(mode);
+    return 'default';
   }, []);
 
   return (
@@ -85,11 +68,10 @@ export function ModeProvider({ children }: { children: ReactNode }) {
       value={{
         currentMode,
         modeHistory,
+        autoDetectEnabled,
         setMode,
-        autoDetectMode,
-        preserveState,
-        restoreState,
-        savedStates
+        toggleAutoDetect,
+        autoDetectMode
       }}
     >
       {children}

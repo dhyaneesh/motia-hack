@@ -26,10 +26,11 @@ export function ChatInterface() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [imageBase64, setImageBase64] = useState<string | null>(null);
-  const { graph, setGraph, addToGraph } = useGraph();
-  const { currentMode, setMode } = useMode();
+  const { graph, setGraph, clearGraph, setRequestId } = useGraph();
+  const { currentMode, setMode, autoDetectEnabled, toggleAutoDetect, autoDetectMode } = useMode();
   const toast = useToast();
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const prevModeRef = useRef(currentMode);
   
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -39,9 +40,33 @@ export function ChatInterface() {
     scrollToBottom();
   }, [messages]);
   
+  // Clear graph and messages when mode changes (modes are isolated)
+  useEffect(() => {
+    if (prevModeRef.current !== currentMode) {
+      clearGraph();
+      setMessages([]);
+      setQuestion('');
+      prevModeRef.current = currentMode;
+    }
+  }, [currentMode, clearGraph]);
+  
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if ((!question.trim() && !imageBase64) || isLoading) return;
+    
+    // Auto-detect mode if enabled (before submitting)
+    let modeToUse = currentMode;
+    if (autoDetectEnabled && question.trim()) {
+      const detectedMode = autoDetectMode(question);
+      if (detectedMode !== currentMode) {
+        // Clear state immediately before switching mode (avoid race condition)
+        setMessages([]);
+        clearGraph();
+        // Switch mode (useEffect will also clear, but that's harmless)
+        setMode(detectedMode);
+        modeToUse = detectedMode;
+      }
+    }
     
     const userMessage: ChatMessage = { 
       role: 'user', 
@@ -49,9 +74,11 @@ export function ChatInterface() {
     };
     const currentQuestion = question;
     
-    // Extract previous query for context-aware graph merging (before adding current message)
+    // Extract previous query for context-aware graph merging (only for default mode)
     const previousUserMessages = messages.filter(m => m.role === 'user');
-    const previousQuery = previousUserMessages.length > 0 ? previousUserMessages.slice(-1)[0]?.content || null : null;
+    const previousQuery = (modeToUse === 'default' && previousUserMessages.length > 0) 
+      ? previousUserMessages.slice(-1)[0]?.content || null 
+      : null;
     
     setMessages(prev => [...prev, userMessage]);
     setQuestion('');
@@ -62,9 +89,15 @@ export function ChatInterface() {
       let requestId: string;
       
       // Route to mode-specific endpoints
-      if (currentMode === 'shopping') {
-        initialResponse = await api.shopping(currentQuestion || 'products');
+      if (modeToUse === 'shopping') {
+        // Shopping mode: can use query or image (or both)
+        initialResponse = await api.shopping(
+          currentQuestion || '', 
+          10,
+          imageBase64 || undefined
+        );
         requestId = initialResponse.requestId;
+        setRequestId(requestId); // Store in context for other components
         // Show immediate response
         const assistantMessage: ChatMessage = { 
           role: 'assistant', 
@@ -98,14 +131,60 @@ export function ChatInterface() {
               }
               return updated;
             });
+          } else if (status.status === 'failed') {
+            toast({
+              title: 'Error',
+              description: status.error || 'Failed to process request',
+              status: 'error',
+              duration: 5000,
+              isClosable: true
+            });
           }
         } catch (pollError: any) {
           console.error('Polling error:', pollError);
+          // Even if polling timed out, try one final check for the graph
+          try {
+            const finalStatus = await api.getChatStatus(requestId);
+            if (finalStatus.status === 'completed' && finalStatus.graph) {
+              setGraph(finalStatus.graph);
+              setMessages(prev => {
+                const updated = [...prev];
+                const lastMsg = updated[updated.length - 1];
+                if (lastMsg && lastMsg.role === 'assistant') {
+                  lastMsg.content = `Found products. Graph ready!`;
+                }
+                return updated;
+              });
+              toast({
+                title: 'Graph ready',
+                description: 'Products found after initial timeout check',
+                status: 'success',
+                duration: 3000,
+                isClosable: true
+              });
+            } else {
+              toast({
+                title: 'Processing timeout',
+                description: 'Product search is still processing. You may need to refresh or try again.',
+                status: 'warning',
+                duration: 5000,
+                isClosable: true
+              });
+            }
+          } catch (finalCheckError) {
+            toast({
+              title: 'Processing timeout',
+              description: 'Product search is taking longer than expected. Please try again later.',
+              status: 'warning',
+              duration: 5000,
+              isClosable: true
+            });
+          }
         }
-      } else if (currentMode === 'study') {
+      } else if (modeToUse === 'study') {
         initialResponse = await api.study(currentQuestion);
         requestId = initialResponse.requestId;
-        
+        setRequestId(requestId); // Store in context for other components
         // Show answer immediately
         const assistantMessage: ChatMessage = { 
           role: 'assistant', 
@@ -121,15 +200,53 @@ export function ChatInterface() {
           
           if (status.status === 'completed' && status.graph) {
             setGraph(status.graph);
+          } else if (status.status === 'failed') {
+            toast({
+              title: 'Error',
+              description: status.error || 'Failed to process request',
+              status: 'error',
+              duration: 5000,
+              isClosable: true
+            });
           }
         } catch (pollError: any) {
           console.error('Polling error:', pollError);
+          // Even if polling timed out, try one final check for the graph
+          try {
+            const finalStatus = await api.getChatStatus(requestId);
+            if (finalStatus.status === 'completed' && finalStatus.graph) {
+              setGraph(finalStatus.graph);
+              toast({
+                title: 'Graph ready',
+                description: 'Learning graph completed after initial timeout check',
+                status: 'success',
+                duration: 3000,
+                isClosable: true
+              });
+            } else {
+              toast({
+                title: 'Processing timeout',
+                description: 'Learning path is still being processed. You may need to refresh or try again.',
+                status: 'warning',
+                duration: 5000,
+                isClosable: true
+              });
+            }
+          } catch (finalCheckError) {
+            toast({
+              title: 'Processing timeout',
+              description: 'Study mode processing is taking longer than expected. Please try again later.',
+              status: 'warning',
+              duration: 5000,
+              isClosable: true
+            });
+          }
         }
       } else {
         // Default mode - pass previous query for continuous graph building
-        initialResponse = await api.chat(currentQuestion, currentMode, imageBase64 || undefined, previousQuery);
+        initialResponse = await api.chat(currentQuestion, modeToUse, imageBase64 || undefined, previousQuery);
         requestId = initialResponse.requestId;
-        
+        setRequestId(requestId); // Store in context for other components
         // Show answer immediately
         const assistantMessage: ChatMessage = { 
           role: 'assistant', 
@@ -176,13 +293,36 @@ export function ChatInterface() {
           }
         } catch (pollError: any) {
           console.error('Polling error:', pollError);
-          toast({
-            title: 'Warning',
-            description: 'Graph building may still be in progress',
-            status: 'warning',
-            duration: 3000,
-            isClosable: true
-          });
+          // Even if polling timed out, try one final check for the graph
+          try {
+            const finalStatus = await api.getChatStatus(requestId);
+            if (finalStatus.status === 'completed' && finalStatus.graph) {
+              setGraph(finalStatus.graph);
+              toast({
+                title: 'Graph ready',
+                description: 'Graph completed after initial timeout check',
+                status: 'success',
+                duration: 3000,
+                isClosable: true
+              });
+            } else {
+              toast({
+                title: 'Processing timeout',
+                description: 'Graph is still being processed. You may need to refresh or try again.',
+                status: 'warning',
+                duration: 5000,
+                isClosable: true
+              });
+            }
+          } catch (finalCheckError) {
+            toast({
+              title: 'Processing timeout',
+              description: 'Graph processing is taking longer than expected. Please try again later.',
+              status: 'warning',
+              duration: 5000,
+              isClosable: true
+            });
+          }
         }
       }
       
@@ -334,8 +474,8 @@ export function ChatInterface() {
       {/* Input */}
       <Box w="100%" p={4} borderTop="1px" borderColor="gray.200" bg="white">
         {/* Mode Switcher */}
-        <HStack spacing={2} mb={3} justify="center">
-          {(['default', 'shopping', 'study'] as Mode[]).map((mode) => (
+        <HStack spacing={2} mb={3} justify="center" flexWrap="wrap">
+          {(['default', 'shopping', 'study'] as const).map((mode) => (
             <Button
               key={mode}
               size="xs"
@@ -346,6 +486,16 @@ export function ChatInterface() {
               {mode === 'default' ? 'Default' : mode === 'shopping' ? 'Shopping' : 'Study'}
             </Button>
           ))}
+          {/* Auto-Detection Toggle */}
+          <Button
+            size="xs"
+            colorScheme={autoDetectEnabled ? 'purple' : 'gray'}
+            variant={autoDetectEnabled ? 'solid' : 'outline'}
+            onClick={toggleAutoDetect}
+            title="Automatically detect mode from query"
+          >
+            Auto
+          </Button>
         </HStack>
         
         <form onSubmit={handleSubmit}>

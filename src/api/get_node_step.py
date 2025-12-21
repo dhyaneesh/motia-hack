@@ -28,7 +28,7 @@ config = {
     "method": "GET",
     "description": "Retrieve detailed information about a specific knowledge graph node including its metadata, references, and related nodes. Used for displaying node details in the sidebar.",
     "emits": [],
-    "flows": ["knowledge-graph-flow"],
+    "flows": ["knowledge-graph-flow", "shopping-flow", "study-flow"],
     "middleware": [create_timing_middleware("GetNodeDetails")],
     "responseSchema": {
         200: NodeDetailsResponse.model_json_schema(),
@@ -50,9 +50,36 @@ async def handler(req, context):
         
         context.logger.info("Fetching node details", {"node_id": node_id})
         
-        # Load graph data from Motia state (persists across requests)
-        node_data = await context.state.get("knowledge_graph", "node_data")
-        graph_nodes = await context.state.get("knowledge_graph", "graph_nodes")
+        # Try to find node in all possible flow types (knowledge_graph, shopping_graph, study_graph)
+        # Check each flow type until we find the node
+        flow_types = ["knowledge_graph", "shopping_graph", "study_graph"]
+        node_data = None
+        graph_nodes = None
+        found_flow_type = None
+        
+        for flow_type in flow_types:
+            temp_node_data = await context.state.get(flow_type, "node_data")
+            temp_graph_nodes = await context.state.get(flow_type, "graph_nodes")
+            
+            # Unwrap if needed
+            if isinstance(temp_node_data, dict) and "data" in temp_node_data and len(temp_node_data) == 1:
+                temp_node_data = temp_node_data.get("data", {})
+            if isinstance(temp_graph_nodes, dict) and "data" in temp_graph_nodes:
+                temp_graph_nodes = temp_graph_nodes.get("data", [])
+            
+            # Check if node exists in this flow's data
+            if isinstance(temp_node_data, dict) and node_id in temp_node_data:
+                node_data = temp_node_data
+                graph_nodes = temp_graph_nodes if isinstance(temp_graph_nodes, list) else []
+                found_flow_type = flow_type
+                context.logger.info("Found node in flow", {"flow_type": flow_type, "node_id": node_id})
+                break
+        
+        # If not found, default to knowledge_graph (for backward compatibility)
+        if not node_data:
+            node_data = await context.state.get("knowledge_graph", "node_data")
+            graph_nodes = await context.state.get("knowledge_graph", "graph_nodes")
+            found_flow_type = "knowledge_graph"
         
         context.logger.info("Raw state data", {
             "node_data_type": type(node_data).__name__,
@@ -107,8 +134,8 @@ async def handler(req, context):
                     cluster_id=node_info.get("cluster_id", "")
                 )
         
-        # Try to restore edges from state first
-        stored_edges = await context.state.get("knowledge_graph", "graph_edges")
+        # Try to restore edges from state first (use the flow type where we found the node)
+        stored_edges = await context.state.get(found_flow_type or "knowledge_graph", "graph_edges")
         if isinstance(stored_edges, dict) and "data" in stored_edges:
             stored_edges = stored_edges.get("data", [])
         
@@ -193,17 +220,50 @@ async def handler(req, context):
         # Get related nodes
         related_nodes = graph_service.get_related_nodes(node_id)
         
+        # Build response with all node data (including product/study specific fields)
+        response_body = {
+            "id": node_id,
+            "name": node["name"],
+            "description": node["description"],
+            "type": node["type"],
+            "clusterId": node["cluster_id"],
+            "references": node["references"],
+            "relatedNodes": related_nodes
+        }
+        
+        # Add product-specific fields if present in node_data
+        if found_flow_type == "shopping_graph" and node_id in node_data:
+            node_info = node_data[node_id]
+            if isinstance(node_info, dict):
+                if "image_url" in node_info:
+                    response_body["imageUrl"] = node_info["image_url"]
+                if "price" in node_info:
+                    response_body["price"] = node_info["price"]
+                if "rating" in node_info:
+                    response_body["rating"] = node_info["rating"]
+                if "retailer" in node_info:
+                    response_body["retailer"] = node_info["retailer"]
+                if "url" in node_info:
+                    response_body["url"] = node_info["url"]
+                if "specs" in node_info:
+                    response_body["specs"] = node_info["specs"]
+                if "review_summary" in node_info:
+                    response_body["reviewSummary"] = node_info["review_summary"]
+        
+        # Add study-specific fields if present
+        if found_flow_type == "study_graph" and node_id in node_data:
+            node_info = node_data[node_id]
+            if isinstance(node_info, dict):
+                if "level" in node_info:
+                    response_body["level"] = node_info["level"]
+                if "prerequisites" in node_info:
+                    response_body["prerequisites"] = node_info["prerequisites"]
+                if "learning_path_position" in node_info:
+                    response_body["learningPathPosition"] = node_info["learning_path_position"]
+        
         return {
             "status": 200,
-            "body": {
-                "id": node_id,
-                "name": node["name"],
-                "description": node["description"],
-                "type": node["type"],
-                "clusterId": node["cluster_id"],
-                "references": node["references"],
-                "relatedNodes": related_nodes
-            }
+            "body": response_body
         }
     except Exception as e:
         context.logger.error("Error fetching node details", {"error": str(e)})

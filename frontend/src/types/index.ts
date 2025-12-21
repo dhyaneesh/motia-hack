@@ -63,7 +63,7 @@ export interface SelectedNodeDetails {
   specs?: Record<string, any>;
   reviewSummary?: string;
   // Study-specific fields
-  level?: number;
+  level?: number | string; // 1=Beginner, 2=Intermediate, 3=Advanced, "Concept"=placeholder
   prerequisites?: string[];
   learningPathPosition?: number;
 }
@@ -81,7 +81,7 @@ export interface ProductNodeData extends NodeData {
 }
 
 export interface StudyNodeData extends NodeData {
-  level?: number; // 1=Beginner, 2=Intermediate, 3=Advanced
+  level?: number | string; // 1=Beginner, 2=Intermediate, 3=Advanced, "Concept"=placeholder
   prerequisites?: string[];
   learningPathPosition?: number;
 }

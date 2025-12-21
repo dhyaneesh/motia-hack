@@ -121,15 +121,25 @@ async def handler(input_data, context):
                     )
         
         # Build graph based on mode
+        products = None  # Initialize for shopping mode
         if data.mode == "shopping":
             # Shopping mode: build product graph
             products = await context.state.get(*StateKeys.products(data.request_id))
             if isinstance(products, dict) and "data" in products:
                 products = products.get("data", [])
             
+            # Ensure products is a list
+            if not isinstance(products, list):
+                products = []
+            
+            if not products:
+                context.logger.warn("No products found for shopping mode", {
+                    "request_id": data.request_id
+                })
+            
             graph = graph_service.build_product_graph(
                 clusters,
-                products,
+                products or [],
                 embeddings=embeddings,
                 k=2
             )
@@ -152,15 +162,28 @@ async def handler(input_data, context):
             )
         
         # Deduplicate highly similar nodes
-        # Create embeddings dict from concepts
+        # Create embeddings dict from concepts or products based on mode
         embeddings_dict = {}
-        for idx, concept in enumerate(concepts):
-            concept_id = concept.get("id")
-            if concept_id and idx < len(embeddings):
-                embedding = embeddings[idx]
-                if hasattr(embedding, 'tolist'):
-                    embedding = embedding.tolist()
-                embeddings_dict[concept_id] = embedding
+        if data.mode == "shopping":
+            # Shopping mode: use products
+            if products and embeddings:
+                for idx, product in enumerate(products):
+                    product_id = product.get("id")
+                    if product_id and idx < len(embeddings):
+                        embedding = embeddings[idx]
+                        if hasattr(embedding, 'tolist'):
+                            embedding = embedding.tolist()
+                        embeddings_dict[product_id] = embedding
+        else:
+            # Default or study mode: use concepts
+            if concepts and embeddings:
+                for idx, concept in enumerate(concepts):
+                    concept_id = concept.get("id")
+                    if concept_id and idx < len(embeddings):
+                        embedding = embeddings[idx]
+                        if hasattr(embedding, 'tolist'):
+                            embedding = embedding.tolist()
+                        embeddings_dict[concept_id] = embedding
         
         # Merge existing embeddings for cross-query deduplication
         if existing_embeddings:

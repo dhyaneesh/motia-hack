@@ -15,20 +15,22 @@ import { api } from '@/services/api';
 interface LearningPathItem {
   id: string;
   name: string;
-  level: number;
+  level: number | string; // 1, 2, 3, or "Concept"
   position: number;
 }
 
-const levelColors = {
+const levelColors: Record<number | string, string> = {
   1: 'green',
   2: 'yellow',
-  3: 'red'
+  3: 'red',
+  'Concept': 'gray'
 };
 
-const levelLabels = {
+const levelLabels: Record<number | string, string> = {
   1: 'Beginner',
   2: 'Intermediate',
-  3: 'Advanced'
+  3: 'Advanced',
+  'Concept': 'Concept'
 };
 
 export function LearningPath() {
@@ -39,7 +41,7 @@ export function LearningPath() {
     ?.map(node => ({
       id: node.id,
       name: node.data?.name || 'Unknown',
-      level: node.data?.level || 2,
+      level: node.data?.level ?? 'Concept',
       position: node.data?.learningPathPosition ?? 0
     }))
     .sort((a, b) => a.position - b.position) || [];
@@ -110,11 +112,11 @@ export function LearningPath() {
                   </Text>
                 </Button>
                 <Badge
-                  colorScheme={levelColors[item.level as keyof typeof levelColors] || 'gray'}
+                  colorScheme={levelColors[item.level] || 'gray'}
                   fontSize="xs"
                   w="fit-content"
                 >
-                  {levelLabels[item.level as keyof typeof levelLabels] || 'Intermediate'}
+                  {levelLabels[item.level] || 'Concept'}
                 </Badge>
               </VStack>
             </HStack>

@@ -9,22 +9,23 @@ interface ConceptCardData {
   description: string;
   nodeType: string;
   clusterId: string;
-  level?: number; // 1=Beginner, 2=Intermediate, 3=Advanced
+  level?: number | string; // 1=Beginner, 2=Intermediate, 3=Advanced, "Concept"=placeholder
   prerequisites?: string[];
   learningPathPosition?: number;
   references: any[];
 }
 
-const levelLabels = {
+const levelLabels: Record<number | string, { label: string; color: string }> = {
   1: { label: 'Beginner', color: 'green' },
   2: { label: 'Intermediate', color: 'yellow' },
-  3: { label: 'Advanced', color: 'red' }
+  3: { label: 'Advanced', color: 'red' },
+  'Concept': { label: 'Concept', color: 'gray' }
 };
 
 export const ConceptCard = memo(({ data, selected }: NodeProps<ConceptCardData>) => {
   const [isExpanded, setIsExpanded] = useState(false);
-  const level = data.level || 2;
-  const levelInfo = levelLabels[level as keyof typeof levelLabels] || levelLabels[2];
+  const level = data.level ?? 'Concept';
+  const levelInfo = levelLabels[level] || levelLabels['Concept'];
 
   return (
     <Box

@@ -32,7 +32,6 @@ config = {
     "infrastructure": {
         "handler": {
             "retries": 3,
-            "timeout": 30,
             "backoffRate": 2
         }
     }
@@ -74,21 +73,15 @@ async def handler(input_data, context):
         })
         
         # Emit next events based on mode
-        if data.mode in ["default", "auto"]:
-            # Knowledge graph flow: search for references
+        # For study mode, skip learning path initially - go directly to references/embeddings/clustering/graph
+        # Learning path will be built on-demand via API
+        if data.mode in ["default", "auto", "study"]:
+            # All modes: search for references first (faster graph rendering)
             await context.emit({
                 "topic": "search-references",
                 "data": {
                     "request_id": data.request_id,
                     "mode": data.mode
-                }
-            })
-        elif data.mode == "study":
-            # Study flow: assign levels first
-            await context.emit({
-                "topic": "assign-levels",
-                "data": {
-                    "request_id": data.request_id
                 }
             })
         
