@@ -17,7 +17,7 @@ config = {
     "type": "event",
     "description": "Assign difficulty levels (beginner/intermediate/advanced) to concepts",
     "subscribes": ["assign-levels"],
-    "emits": ["identify-prerequisites"],
+    "emits": ["build-learning-path"],
     "flows": ["study-flow"],
     "input": AssignLevelsInput.model_json_schema(),
     "infrastructure": {
@@ -82,7 +82,7 @@ async def handler(input_data, context):
         
         # Emit next event
         await context.emit({
-            "topic": "identify-prerequisites",
+            "topic": "build-learning-path",
             "data": {
                 "request_id": data.request_id
             }

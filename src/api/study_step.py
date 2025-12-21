@@ -28,7 +28,7 @@ config = {
     "type": "api",
     "path": "/api/study",
     "method": "POST",
-    "description": "Process a study question and return concepts organized by hierarchy levels with learning paths and prerequisites.",
+    "description": "Process a study question and return concepts organized by hierarchy levels with learning paths.",
     "emits": ["extract-concepts"],
     "flows": ["study-flow"],
     "middleware": [create_timing_middleware("StudyAPI")],

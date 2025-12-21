@@ -2,7 +2,7 @@ import axios from 'axios';
 import { GraphData, SelectedNodeDetails } from '@/types';
 
 const client = axios.create({
-  baseURL: process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000'
+  baseURL: process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
 });
 
 export interface ChatStatusResponse {

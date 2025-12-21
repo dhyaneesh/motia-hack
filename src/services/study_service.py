@@ -1,4 +1,4 @@
-"""Service for study mode: concept hierarchy, learning paths, prerequisites."""
+"""Service for study mode: concept hierarchy and learning paths."""
 import os
 import json
 from typing import List, Dict
@@ -50,7 +50,7 @@ async def build_learning_path(concepts: List[Dict]) -> List[Dict]:
     Generate suggested learning sequence for concepts.
     
     Args:
-        concepts: List of concept dictionaries with levels and prerequisites
+        concepts: List of concept dictionaries with levels
         
     Returns:
         List of concepts in suggested learning order
@@ -79,57 +79,4 @@ async def build_learning_path(concepts: List[Dict]) -> List[Dict]:
         return concepts
 
 
-async def identify_prerequisites(concept: Dict, all_concepts: List[Dict]) -> List[str]:
-    """
-    Find prerequisite concepts for a given concept.
-    
-    Args:
-        concept: Concept dictionary
-        all_concepts: List of all available concepts
-        
-    Returns:
-        List of prerequisite concept IDs
-    """
-    try:
-        concept_names = [c.get("name", "") for c in all_concepts[:10]]  # Limit for token efficiency
-        
-        prompt = f"""Given this concept and a list of other concepts, identify which concepts are prerequisites (must be learned before this one).
-
-        Concept: {concept.get('name', '')}
-        Description: {concept.get('description', '')}
-        
-        Available concepts: {', '.join(concept_names)}
-        
-        Return ONLY a JSON array of concept names that are prerequisites, or an empty array [] if none.
-        Example: ["Basic Math", "Algebra"]
-        Return only the JSON array, no other text."""
-        
-        response = client.models.generate_content(
-            model="gemini-2.5-flash",
-            contents=prompt
-        )
-        
-        text = response.text.strip()
-        
-        # Remove markdown code blocks if present
-        if text.startswith("```"):
-            text = text.split("```")[1]
-            if text.startswith("json"):
-                text = text[4:]
-            text = text.strip()
-        
-        prerequisite_names = json.loads(text)
-        
-        # Convert names to IDs
-        prerequisites = []
-        for name in prerequisite_names:
-            for c in all_concepts:
-                if c.get("name", "").lower() == name.lower():
-                    prerequisites.append(c.get("id", ""))
-                    break
-        
-        return prerequisites
-        
-    except Exception as e:
-        # Fallback: return empty list
-        return []
+# identify_prerequisites function removed - feature no longer used

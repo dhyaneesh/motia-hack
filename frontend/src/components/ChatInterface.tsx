@@ -15,6 +15,7 @@ import {
   Heading
 } from '@chakra-ui/react';
 import { AttachmentIcon } from '@chakra-ui/icons';
+import ReactMarkdown from 'react-markdown';
 import { useGraph } from '@/contexts/GraphContext';
 import { useMode, Mode } from '@/contexts/ModeContext';
 import { api } from '@/services/api';
@@ -229,9 +230,96 @@ export function ChatInterface() {
               bg={msg.role === 'user' ? 'blue.500' : 'gray.100'}
               color={msg.role === 'user' ? 'white' : 'black'}
             >
-              <Text fontSize="sm" whiteSpace="pre-wrap">
-                {msg.content}
-              </Text>
+              {msg.role === 'assistant' ? (
+                <Box fontSize="sm" sx={{ 
+                  '& p:last-child': { mb: 0 },
+                  '& ul, & ol': { mb: 2 },
+                  '& li': { mb: 1 }
+                }}>
+                  <ReactMarkdown
+                    components={{
+                      p: ({ children }) => <Text mb={2} lineHeight="1.6">{children}</Text>,
+                      h1: ({ children }) => <Heading as="h1" size="md" mb={2} mt={4}>{children}</Heading>,
+                      h2: ({ children }) => <Heading as="h2" size="sm" mb={2} mt={3}>{children}</Heading>,
+                      h3: ({ children }) => <Heading as="h3" size="xs" mb={1} mt={2}>{children}</Heading>,
+                      ul: ({ children }) => <Box as="ul" pl={4} mb={2} style={{ listStyleType: 'disc' }}>{children}</Box>,
+                      ol: ({ children }) => <Box as="ol" pl={4} mb={2} style={{ listStyleType: 'decimal' }}>{children}</Box>,
+                      li: ({ children }) => <Box as="li" mb={1} lineHeight="1.6">{children}</Box>,
+                      code: ({ children, className, ...props }) => {
+                        // Inline code doesn't have className, code blocks do
+                        const isInline = !className;
+                        return (
+                          <Box
+                            as="code"
+                            bg={isInline ? 'gray.200' : 'transparent'}
+                            color={isInline ? 'gray.800' : 'gray.100'}
+                            px={isInline ? 1.5 : 0}
+                            py={isInline ? 0.5 : 0}
+                            borderRadius="md"
+                            fontSize={isInline ? '0.85em' : 'xs'}
+                            fontFamily="mono"
+                            display={isInline ? 'inline' : 'block'}
+                            {...props}
+                          >
+                            {children}
+                          </Box>
+                        );
+                      },
+                      pre: ({ children }) => (
+                        <Box
+                          as="pre"
+                          bg="gray.800"
+                          color="gray.100"
+                          p={3}
+                          borderRadius="md"
+                          fontSize="xs"
+                          fontFamily="mono"
+                          overflowX="auto"
+                          mb={2}
+                          mt={2}
+                        >
+                          {children}
+                        </Box>
+                      ),
+                      blockquote: ({ children }) => (
+                        <Box
+                          as="blockquote"
+                          borderLeft="4px solid"
+                          borderColor="gray.400"
+                          pl={3}
+                          my={2}
+                          fontStyle="italic"
+                          color="gray.700"
+                        >
+                          {children}
+                        </Box>
+                      ),
+                      a: ({ href, children }) => (
+                        <Text
+                          as="a"
+                          href={href}
+                          color="blue.600"
+                          textDecoration="underline"
+                          _hover={{ color: 'blue.700' }}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                        >
+                          {children}
+                        </Text>
+                      ),
+                      strong: ({ children }) => <Text as="strong" fontWeight="bold">{children}</Text>,
+                      em: ({ children }) => <Text as="em" fontStyle="italic">{children}</Text>,
+                      hr: () => <Box as="hr" borderColor="gray.300" my={3} />,
+                    }}
+                  >
+                    {msg.content}
+                  </ReactMarkdown>
+                </Box>
+              ) : (
+                <Text fontSize="sm" whiteSpace="pre-wrap">
+                  {msg.content}
+                </Text>
+              )}
             </Box>
           ))}
           {isLoading && (

@@ -634,12 +634,7 @@ class GraphService:
                         if self.graph.has_node(concept_id1) and self.graph.has_node(concept_id2):
                             self.graph.add_edge(concept_id1, concept_id2, weight=0.8, type="cluster")
         
-        # Add prerequisite edges (always added, regardless of KNN/cluster edges)
-        for concept_id, data in self.node_data.items():
-            prerequisites = data.get("prerequisites", [])
-            for prereq_id in prerequisites:
-                if self.graph.has_node(prereq_id) and self.graph.has_node(concept_id):
-                    self.graph.add_edge(prereq_id, concept_id, weight=0.9, type="prerequisite")
+        # Prerequisite edges removed - feature no longer used
         
         # Calculate positions using spring layout
         if len(self.graph.nodes()) > 0:
