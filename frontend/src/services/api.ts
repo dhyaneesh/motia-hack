@@ -6,8 +6,8 @@ const client = axios.create({
 });
 
 export const api = {
-  async chat(question: string, mode?: string, image?: string): Promise<{ answer: string; graph: GraphData }> {
-    const response = await client.post('/api/chat', { question, mode, image });
+  async chat(question: string, mode?: string, image?: string, previousQuery?: string | null): Promise<{ answer: string; graph: GraphData }> {
+    const response = await client.post('/api/chat', { question, mode, image, previousQuery });
     // Motia returns { status, body }, extract body
     return response.data.body || response.data;
   },

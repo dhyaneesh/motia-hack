@@ -25,7 +25,7 @@ export function ChatInterface() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [imageBase64, setImageBase64] = useState<string | null>(null);
-  const { setGraph } = useGraph();
+  const { graph, setGraph, addToGraph } = useGraph();
   const { currentMode, setMode } = useMode();
   const toast = useToast();
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -46,8 +46,13 @@ export function ChatInterface() {
       role: 'user', 
       content: question || (imageBase64 ? '[Image uploaded]' : '') 
     };
-    setMessages(prev => [...prev, userMessage]);
     const currentQuestion = question;
+    
+    // Extract previous query for context-aware graph merging (before adding current message)
+    const previousUserMessages = messages.filter(m => m.role === 'user');
+    const previousQuery = previousUserMessages.length > 0 ? previousUserMessages.slice(-1)[0]?.content || null : null;
+    
+    setMessages(prev => [...prev, userMessage]);
     setQuestion('');
     setIsLoading(true);
     
@@ -65,8 +70,8 @@ export function ChatInterface() {
       } else if (currentMode === 'study') {
         response = await api.study(currentQuestion);
       } else {
-        // Default mode
-        response = await api.chat(currentQuestion, currentMode, imageBase64 || undefined);
+        // Default mode - pass previous query for continuous graph building
+        response = await api.chat(currentQuestion, currentMode, imageBase64 || undefined, previousQuery);
       }
       
       const assistantMessage: ChatMessage = { 
@@ -75,8 +80,9 @@ export function ChatInterface() {
       };
       setMessages(prev => [...prev, assistantMessage]);
       
-      // Update graph
+      // Update graph - backend now returns merged graph with all nodes
       if (response.graph) {
+        // Backend handles merging, so we just set the complete graph
         setGraph(response.graph);
       }
       

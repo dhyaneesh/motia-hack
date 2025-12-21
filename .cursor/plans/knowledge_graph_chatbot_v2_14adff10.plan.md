@@ -1138,8 +1138,8 @@ sequenceDiagram
 4. **Exa AI Search**: Returns full article text which is stored as references for sidebar display
 5. **Dynamic Import for React Flow**: Use Next.js dynamic imports to avoid SSR issues:
    ```typescript
-            import dynamic from 'next/dynamic';
-            const KnowledgeGraph = dynamic(() => import('@/components/KnowledgeGraph'), { ssr: false });
+                  import dynamic from 'next/dynamic';
+                  const KnowledgeGraph = dynamic(() => import('@/components/KnowledgeGraph'), { ssr: false });
    ```
 
 
@@ -1153,5 +1153,3 @@ sequenceDiagram
 
 1. Ask question → Graph appears with clustered nodes
 2. Click node → Sidebar opens with name, description
-3. Sidebar shows references with URLs
-4. Click reference link → Opens source in new tab

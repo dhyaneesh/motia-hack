@@ -19,6 +19,7 @@ class ChatRequest(BaseModel):
     context: dict = {}
     mode: str = "default"  # 'default', 'shopping', 'study', or 'auto'
     image: Optional[str] = None  # base64 encoded image for multi-modal search
+    previousQuery: Optional[str] = None  # Previous query for context-aware graph merging
 
 class ChatResponse(BaseModel):
     answer: str
@@ -51,6 +52,7 @@ async def handler(req, context):
         question = body.get("question", "")
         mode = body.get("mode", "default")
         image = body.get("image")
+        previous_query = body.get("previousQuery")  # Previous query for context-aware merging
         
         if not question and not image:
             return {
@@ -128,15 +130,103 @@ async def handler(req, context):
         embeddings = await embedding_service.get_embeddings(embedding_texts)
         context.logger.info("Generated embeddings", {"embedding_count": len(embeddings)})
         
-        # 5. Cluster concepts by similarity
+        # 5. Load existing graph state to continue building on it
+        existing_node_data = await context.state.get("knowledge_graph", "node_data") or {}
+        existing_graph_nodes = await context.state.get("knowledge_graph", "graph_nodes") or []
+        existing_edges = await context.state.get("knowledge_graph", "graph_edges") or []
+        existing_embeddings = await context.state.get("knowledge_graph", "embeddings") or {}
+        
+        # Unwrap data if it has a "data" wrapper from Motia state
+        if isinstance(existing_node_data, dict) and "data" in existing_node_data and len(existing_node_data) == 1:
+            existing_node_data = existing_node_data.get("data", {})
+        if isinstance(existing_graph_nodes, dict) and "data" in existing_graph_nodes:
+            existing_graph_nodes = existing_graph_nodes.get("data", [])
+        if isinstance(existing_edges, dict) and "data" in existing_edges:
+            existing_edges = existing_edges.get("data", [])
+        if isinstance(existing_embeddings, dict) and "data" in existing_embeddings:
+            existing_embeddings = existing_embeddings.get("data", {})
+        
+        # Clear and restore graph service state (it's a global singleton)
+        # This ensures clean state for each request
+        import networkx as nx
+        graph_service.graph = nx.Graph()
+        graph_service.node_data = {}
+        
+        # Restore existing graph to graph_service
+        if existing_node_data:
+            graph_service.node_data = existing_node_data.copy()
+            # Rebuild networkx graph from stored nodes with their attributes
+            for node_id in existing_graph_nodes:
+                node_info = existing_node_data.get(node_id, {})
+                if isinstance(node_info, dict):
+                    graph_service.graph.add_node(
+                        node_id,
+                        name=node_info.get("name", "Unknown"),
+                        description=node_info.get("description", ""),
+                        type=node_info.get("type", "concept"),
+                        cluster_id=node_info.get("cluster_id", "")
+                    )
+            for edge in existing_edges:
+                if edge.get("source") and edge.get("target"):
+                    # Preserve edge type if available
+                    edge_type = edge.get("type", "cluster")
+                    graph_service.graph.add_edge(
+                        edge["source"], 
+                        edge["target"], 
+                        weight=edge.get("weight", 1.0),
+                        type=edge_type
+                    )
+            context.logger.info("Restored existing graph state", {
+                "existing_nodes": len(existing_graph_nodes),
+                "existing_edges": len(existing_edges),
+                "node_data_keys": list(graph_service.node_data.keys())[:5]
+            })
+        
+        # 6. Cluster concepts by similarity
         clusters = await clustering_service.cluster_concepts(embeddings, concepts)
         context.logger.info("Clustered concepts", {"cluster_count": len(clusters)})
         
-        # 6. Build graph from clusters and concepts with KNN edges
-        graph = graph_service.build_graph(clusters, concepts, embeddings=embeddings, k=2)
-        context.logger.info("Built graph", {"node_count": len(graph["nodes"]), "edge_count": len(graph["edges"])})
+        # 7. Build graph from clusters and concepts with KNN edges
+        # Use merge=True if this is a follow-up query (previousQuery exists)
+        should_merge = previous_query is not None and len(existing_graph_nodes) > 0
+        graph = graph_service.build_graph(clusters, concepts, embeddings=embeddings, k=2, merge=should_merge)
+        context.logger.info("Built graph", {
+            "node_count": len(graph["nodes"]), 
+            "edge_count": len(graph["edges"]),
+            "merged": should_merge
+        })
         
-        # 7. Store graph data in Motia state for persistence across requests
+        # 7a. Connect new nodes to existing nodes if this is a follow-up query
+        cross_query_edges = []
+        if should_merge and existing_embeddings and len(embeddings) > 0:
+            # Create mapping of new concept IDs to their embeddings
+            new_embeddings_dict = {}
+            for idx, concept in enumerate(concepts):
+                concept_id = concept.get("id")
+                if concept_id and idx < len(embeddings):
+                    new_embeddings_dict[concept_id] = embeddings[idx]
+            
+            # Get list of new node IDs (concepts from current query)
+            new_node_ids = [c.get("id") for c in concepts if c.get("id")]
+            
+            if new_node_ids and new_embeddings_dict:
+                context.logger.info("Connecting cross-query nodes", {
+                    "new_nodes": len(new_node_ids),
+                    "existing_nodes": len(existing_embeddings)
+                })
+                cross_query_edges = graph_service.connect_cross_query_nodes(
+                    new_node_ids,
+                    new_embeddings_dict,
+                    existing_embeddings,
+                    similarity_threshold=0.6,
+                    max_connections_per_node=3
+                )
+                context.logger.info("Created cross-query edges", {"edge_count": len(cross_query_edges)})
+                
+                # Add cross-query edges to the graph response
+                graph["edges"].extend(cross_query_edges)
+        
+        # 8. Store updated graph data in Motia state for persistence across requests
         node_ids_list = list(graph_service.graph.nodes())
         # Store edges for persistence
         edges_list = []
@@ -145,21 +235,35 @@ async def handler(req, context):
                 "id": f"{u}-{v}",
                 "source": u,
                 "target": v,
-                "type": "smoothstep",
+                "type": edge_data.get("type", "cluster"),  # Preserve actual edge type (knn, cluster, cross-query, expanded)
+                "visual_type": "smoothstep",  # React Flow visual type
                 "weight": edge_data.get("weight", 1.0)
             })
+        
+        # Store embeddings for new concepts (merge with existing)
+        updated_embeddings = existing_embeddings.copy() if existing_embeddings else {}
+        for idx, concept in enumerate(concepts):
+            concept_id = concept.get("id")
+            if concept_id and idx < len(embeddings):
+                # Convert numpy array to list if needed
+                embedding = embeddings[idx]
+                if hasattr(embedding, 'tolist'):
+                    embedding = embedding.tolist()
+                updated_embeddings[concept_id] = embedding
         
         context.logger.info("Storing graph state", {
             "node_data_keys_count": len(graph_service.node_data),
             "node_data_keys_sample": list(graph_service.node_data.keys())[:5],
             "graph_nodes_count": len(node_ids_list),
             "graph_nodes_sample": node_ids_list[:5],
-            "edges_count": len(edges_list)
+            "edges_count": len(edges_list),
+            "embeddings_count": len(updated_embeddings)
         })
         
         await context.state.set("knowledge_graph", "node_data", graph_service.node_data)
         await context.state.set("knowledge_graph", "graph_nodes", node_ids_list)
         await context.state.set("knowledge_graph", "graph_edges", edges_list)
+        await context.state.set("knowledge_graph", "embeddings", updated_embeddings)
         
         return {
             "status": 200,

@@ -58,7 +58,7 @@ class GraphService:
         
         return edges
     
-    def build_graph(self, clusters: List[Dict], concepts: List[Dict], embeddings: Optional[List[List[float]]] = None, k: int = 2) -> Dict:
+    def build_graph(self, clusters: List[Dict], concepts: List[Dict], embeddings: Optional[List[List[float]]] = None, k: int = 2, merge: bool = True) -> Dict:
         """Build knowledge graph from clusters and concepts.
         
         Args:
@@ -66,10 +66,12 @@ class GraphService:
             concepts: List of concept dictionaries
             embeddings: Optional list of embedding vectors for KNN edge building
             k: Number of nearest neighbors when using embeddings (default: 2)
+            merge: If True, merge with existing graph; if False, clear and rebuild (default: True)
         """
-        # Clear previous graph
-        self.graph = nx.Graph()
-        self.node_data = {}
+        # Only clear previous graph if not merging
+        if not merge:
+            self.graph = nx.Graph()
+            self.node_data = {}
         
         # Create a concept lookup
         concept_lookup = {c.get("id"): c for c in concepts}
@@ -191,8 +193,11 @@ class GraphService:
                 "id": f"{u}-{v}",
                 "source": u,
                 "target": v,
-                "type": "smoothstep",
-                "weight": edge_data.get("weight", 1.0)
+                "type": "smoothstep",  # React Flow visual type
+                "weight": edge_data.get("weight", 1.0),
+                "data": {
+                    "edgeType": edge_data.get("type", "cluster")  # Store actual edge type in data for debugging/filtering
+                }
             })
         
         return {"nodes": nodes, "edges": edges}
@@ -366,6 +371,86 @@ class GraphService:
                 continue
         
         return new_nodes, new_edges
+    
+    def connect_cross_query_nodes(
+        self, 
+        new_node_ids: List[str], 
+        new_embeddings: Dict[str, List[float]], 
+        existing_embeddings: Dict[str, List[float]],
+        similarity_threshold: float = 0.6,
+        max_connections_per_node: int = 3
+    ) -> List[Dict]:
+        """
+        Create edges between new nodes and existing nodes based on embedding similarity.
+        
+        Args:
+            new_node_ids: List of node IDs from the current query
+            new_embeddings: Dict mapping new node_id -> embedding vector
+            existing_embeddings: Dict mapping existing node_id -> embedding vector
+            similarity_threshold: Minimum cosine similarity to create an edge (default: 0.6)
+            max_connections_per_node: Maximum number of connections per new node (default: 3)
+            
+        Returns:
+            List of new edge dictionaries in React Flow format
+        """
+        if not new_node_ids or not new_embeddings or not existing_embeddings:
+            return []
+        
+        new_edges = []
+        
+        # Convert embeddings to numpy arrays for efficient computation
+        for new_node_id in new_node_ids:
+            if new_node_id not in new_embeddings:
+                continue
+            
+            new_embedding = np.array(new_embeddings[new_node_id])
+            similarities = []
+            
+            # Calculate similarity with all existing nodes
+            for existing_node_id, existing_embedding in existing_embeddings.items():
+                # Skip if nodes are the same (shouldn't happen, but defensive)
+                if new_node_id == existing_node_id:
+                    continue
+                
+                # Skip if edge already exists
+                if self.graph.has_edge(new_node_id, existing_node_id):
+                    continue
+                
+                # Calculate cosine similarity
+                existing_emb = np.array(existing_embedding)
+                similarity = cosine_similarity([new_embedding], [existing_emb])[0][0]
+                
+                if similarity >= similarity_threshold:
+                    similarities.append((existing_node_id, similarity))
+            
+            # Sort by similarity (descending) and take top connections
+            similarities.sort(key=lambda x: x[1], reverse=True)
+            top_connections = similarities[:max_connections_per_node]
+            
+            # Create edges for top connections
+            for existing_node_id, similarity in top_connections:
+                # Ensure both nodes exist in the graph
+                if not self.graph.has_node(new_node_id) or not self.graph.has_node(existing_node_id):
+                    continue
+                
+                # Add edge to graph
+                self.graph.add_edge(
+                    new_node_id, 
+                    existing_node_id, 
+                    weight=float(similarity), 
+                    type="cross-query"
+                )
+                
+                # Create edge data for React Flow
+                new_edges.append({
+                    "id": f"{new_node_id}-{existing_node_id}",
+                    "source": new_node_id,
+                    "target": existing_node_id,
+                    "type": "smoothstep",
+                    "weight": float(similarity)
+                })
+        
+        return new_edges
     
     def build_product_graph(self, clusters: List[Dict], products: List[Dict], embeddings: Optional[List[List[float]]] = None, k: int = 2) -> Dict:
         """Build knowledge graph from product clusters.

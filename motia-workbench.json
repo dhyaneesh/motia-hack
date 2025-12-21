@@ -28,5 +28,23 @@
         "y": 64
       }
     }
+  },
+  {
+    "id": "study-flow",
+    "config": {
+      "src\\api\\study_step.py": {
+        "x": 0,
+        "y": 0
+      }
+    }
+  },
+  {
+    "id": "shopping-flow",
+    "config": {
+      "src\\api\\shopping_step.py": {
+        "x": 0,
+        "y": 0
+      }
+    }
   }
 ]
