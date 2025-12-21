@@ -1,6 +1,8 @@
-# Dive- Search Redefined
+# Dive - Search Redefined
 
 **Dive** is an AI-powered knowledge graph that clusters search results into an interactive graph and links each concept to source references. Clustering groups related concepts visually, so users see thematic relationships instead of a flat list. Each node shows clickable source links with article excerpts, enabling verification of AI claims. Unlike Google AI Overview or Gemini UI, where sources are hidden or unclear, DiveSearch shows which sources support each concept—click any node to see references and verify claims. This provides AI insights with full source attribution, making it easier to verify and explore deeper.
+
+### Dive is a concept showing how search could be redefined in the future of AI, just like how Motia is doing the same for backend development😝
 
 ## Table of Contents
 
