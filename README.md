@@ -148,6 +148,9 @@ flowchart TB
     class Redis state
     class Gemini,Tavily,SerpAPI external
 ```
+### Motia WorkFlow
+![WhatsApp Image 2025-12-21 at 10 31 32 PM](https://github.com/user-attachments/assets/4397f799-5065-4de6-a89e-11a85d2abba5)
+
 
 ### Event Flow
 
